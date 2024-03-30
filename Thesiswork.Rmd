@@ -6,22 +6,20 @@ output: html_notebook
 # Let's load in the data and packages
 
 ```{r}
-
-#pscholes for at office
-#paulb for at home compys
 library(haven)
+
 UNASR16 <- read_dta("C:/Users/paulb/OneDrive/Documents/Refugee/2016/2016-ASR_Public_Use_File.dta")
 #View(ASR16)
 
-library(haven)
+
 UNASR17 <- read_dta("C:/Users/paulb/OneDrive/Documents/Refugee/2017/2017 ASR_Public_Use_File (1).dta")
 #View(ASR17)
 
-library(haven)
+
 UNASR18 <- read_dta("C:/Users/paulb/OneDrive/Documents/Refugee/2018/2018 ASR_Public_Use_File.dta")
 #View(ASR18)
 
-library(haven)
+
 UNASR19 <- read_dta("C:/Users/paulb/OneDrive/Documents/Refugee/2019/2019 ASR_Public_Use_File.dta")
 #View(ASR19)
 ```
@@ -1444,7 +1442,9 @@ summary(prehuTJPOOLED)
 
 ```{r}
 #Supplemantal Models
-summary(svyglm(TILLJOB~ as.numeric(WHENARRIVE)+ SEX+AGE+numppl+MARSTAT+DEPENDS+relevel(ORIGIN,"Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+EDUC+CONTEXT+EDUC+PREENG+CURENGEN+CUREMPT+CURENG, family = "binomial", design = wPOOLED))
+TJ_pooled_unmiced<-svyglm(TILLJOB~ as.numeric(WHENARRIVE)+ SEX+AGE+numppl+MARSTAT+DEPENDS+relevel(ORIGIN,"Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+EDUC+CONTEXT+EDUC+PREENG+CURENGEN+CUREMPT+CURENG, family = "binomial", design = wPOOLED)
+summary(TJ_pooled_unmiced)
+vif(TJ_pooled_unmiced)
 #2016
 summary(svyglm(TILLJOB~ as.numeric(WHENARRIVE)+ SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,"Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+EDUC+CONTEXT+EDUC+PREENG+CURENGEN+CUREMPT+CURENG, family = "binomial", design = wtemp16))
 
@@ -1560,6 +1560,140 @@ predict(modelc, newdata =maxconpred, type = "response")
 
 predict(modelc, newdata =maxhumpred, type = "response")
 
+```
+
+
+# For Canadian Comparisons
+I need to find the proportion of economically self-sufficient refugees in each American cohort. They need to be weighted. 
+
+```{r}
+USin19cohort14<- UNSR19[UNSR19$WHENARRIVE==2014,]
+USin19cohort14<- USin19cohort14[!(is.na(USin19cohort14$hhid)),]
+USin19cohort14_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin19cohort14,na.rm=T)
+svymean(USin19cohort14$FI, USin19cohort14_w, na.rm=T)
+```
+Now for USin19cohort15
+```{r}
+USin19cohort15<- UNSR19[UNSR19$WHENARRIVE==2015,]
+USin19cohort15<- USin19cohort15[!(is.na(USin19cohort15$hhid)),]
+USin19cohort15_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin19cohort15,na.rm=T)
+USin19cohort15$FI
+```
+```{r}
+USin19cohort16<- UNSR19[UNSR19$WHENARRIVE==2016,]
+USin19cohort16<- USin19cohort16[!(is.na(USin19cohort16$hhid)),]
+USin19cohort16_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin19cohort16,na.rm=T)
+USin19cohort16$FI
+```
+```{r}
+USin19cohort17<- UNSR19[UNSR19$WHENARRIVE==2017,]
+USin19cohort17<- USin19cohort17[!(is.na(USin19cohort17$hhid)),]
+USin19cohort17_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin19cohort17,na.rm=T)
+USin19cohort17$FI
+```
+```{r}
+USin19cohort18<- UNSR19[UNSR19$WHENARRIVE==2018,]
+USin19cohort18<- USin19cohort18[!(is.na(USin19cohort18$hhid)),]
+USin19cohort18_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin19cohort18,na.rm=T)
+USin19cohort18$FI
+```
+Now for the 2018.
+```{r}
+USin18cohort17<- UNSR18[UNSR18$WHENARRIVE==2017,]
+USin18cohort17<- USin18cohort17[!(is.na(USin18cohort17$hhid)),]
+USin18cohort17_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin18cohort17,na.rm=T)
+USin18cohort17$FI
+```
+```{r}
+USin18cohort16<- UNSR18[UNSR18$WHENARRIVE==2016,]
+USin18cohort16<- USin18cohort16[!(is.na(USin18cohort16$hhid)),]
+USin18cohort16_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin18cohort16,na.rm=T)
+USin18cohort16$FI
+```
+```{r}
+USin18cohort15<- UNSR18[UNSR18$WHENARRIVE==2015,]
+USin18cohort15<- USin18cohort15[!(is.na(USin18cohort15$hhid)),]
+USin18cohort15_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin18cohort15,na.rm=T)
+USin18cohort15$FI
+```
+```{r}
+USin18cohort14<- UNSR18[UNSR18$WHENARRIVE==2014,]
+USin18cohort14<- USin18cohort14[!(is.na(USin18cohort14$hhid)),]
+USin18cohort14_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin18cohort14,na.rm=T)
+USin18cohort14$FI
+```
+```{r}
+USin18cohort13<- UNSR18[UNSR18$WHENARRIVE==2013,]
+USin18cohort13<- USin18cohort13[!(is.na(USin18cohort13$hhid)),]
+USin18cohort13_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin18cohort13,na.rm=T)
+USin18cohort13$FI
+```
+Now for 2017
+
+```{r}
+USin17cohort16<- UNSR17[UNSR17$WHENARRIVE==2016,]
+USin17cohort16<- USin17cohort16[!(is.na(USin17cohort16$hhid)),]
+USin17cohort16_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin17cohort16,na.rm=T)
+svymean(USin17cohort16$FI, USin17cohort16_w, na.rm=T)
+```
+```{r}
+USin17cohort15<- UNSR17[UNSR17$WHENARRIVE==2015,]
+USin17cohort15<- USin17cohort15[!(is.na(USin17cohort15$hhid)),]
+USin17cohort15_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin17cohort15,na.rm=T)
+svymean(USin17cohort15$FI, USin17cohort15_w, na.rm=T)
+```
+
+```{r}
+USin17cohort14<- UNSR17[UNSR17$WHENARRIVE==2014,]
+USin17cohort14<- USin17cohort14[!(is.na(USin17cohort14$hhid)),]
+USin17cohort14_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin17cohort14,na.rm=T)
+svymean(USin17cohort14$FI, USin17cohort14_w, na.rm=T)
+```
+
+```{r}
+USin17cohort13<- UNSR17[UNSR17$WHENARRIVE==2013,]
+USin17cohort13<- USin17cohort13[!(is.na(USin17cohort13$hhid)),]
+USin17cohort13_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin17cohort13,na.rm=T)
+svymean(USin17cohort13$FI, USin17cohort13_w, na.rm=T)
+```
+
+```{r}
+USin17cohort12<- UNSR17[UNSR17$WHENARRIVE==2012,]
+USin17cohort12<- USin17cohort12[!(is.na(USin17cohort12$hhid)),]
+USin17cohort12_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin17cohort12,na.rm=T)
+svymean(USin17cohort12$FI, USin17cohort12_w, na.rm=T)
+```
+And 2016
+
+```{r}
+USin16cohort15<- UNSR16[UNSR16$WHENARRIVE==2015,]
+USin16cohort15<- USin16cohort15[!(is.na(USin16cohort15$hhid)),]
+USin16cohort15_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin16cohort15,na.rm=T)
+svymean(USin16cohort15$FI, USin16cohort15_w, na.rm=T)
+```
+```{r}
+USin16cohort14<- UNSR16[UNSR16$WHENARRIVE==2014,]
+USin16cohort14<- USin16cohort14[!(is.na(USin16cohort14$hhid)),]
+USin16cohort14_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin16cohort14,na.rm=T)
+svymean(USin16cohort14$FI, USin16cohort14_w, na.rm=T)
+```
+```{r}
+USin16cohort13<- UNSR16[UNSR16$WHENARRIVE==2013,]
+USin16cohort13<- USin16cohort13[!(is.na(USin16cohort13$hhid)),]
+USin16cohort13_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin16cohort13,na.rm=T)
+svymean(USin16cohort13$FI, USin16cohort13_w, na.rm=T)
+```
+```{r}
+USin16cohort12<- UNSR16[UNSR16$WHENARRIVE==2012,]
+USin16cohort12<- USin16cohort12[!(is.na(USin16cohort12$hhid)),]
+USin16cohort12_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin16cohort12,na.rm=T)
+svymean(USin16cohort12$FI, USin16cohort12_w, na.rm=T)
+```
+```{r}
+USin16cohort11<- UNSR16[UNSR16$WHENARRIVE==2011,]
+USin16cohort11<- USin16cohort11[!(is.na(USin16cohort11$hhid)),]
+USin16cohort11_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin16cohort11,na.rm=T)
+svymean(USin16cohort11$FI, USin16cohort11_w, na.rm=T)
 ```
 
 
