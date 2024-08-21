@@ -6,7 +6,19 @@ output: html_notebook
 # Let's load in the data and packages
 
 ```{r}
+library(janitor)
+library(stargazer)
+library(tidyverse)
+library(mice)
+library(DescTools)
+library(survey)
+library(lmtest)
+library(naniar)
+library(glue)
 library(haven)
+```
+
+```{r}
 
 UNASR16 <- read_dta("C:/Users/paulb/OneDrive/Documents/Refugee/2016/2016-ASR_Public_Use_File.dta")
 #View(ASR16)
@@ -25,15 +37,24 @@ UNASR19 <- read_dta("C:/Users/paulb/OneDrive/Documents/Refugee/2019/2019 ASR_Pub
 ```
 
 ```{r}
-library(janitor)
-library(stargazer)
-library(tidyverse)
-library(mice)
-library(DescTools)
-library(survey)
-library(lmtest)
-library(naniar)
+UNASR16<-zap_labels(UNASR16)
+UNASR17<-zap_labels(UNASR17)
+UNASR18<-zap_labels(UNASR18)
+UNASR19<-zap_labels(UNASR19)
+
 ```
+
+I need a function to make better tables
+```{r}
+logit_results<-function(summary_object){
+  output<-cbind.data.frame(summary_object$term, round(exp(summary_object$estimate),2), round(summary_object$p.value, 3))
+  return(output)
+}
+
+```
+
+
+
 
 
 Setting up weighted household level analysis
@@ -73,7 +94,13 @@ UNSR19$WHENJOB<- ifelse(is.na(UNSR19$qn18dyear), 0, UNSR19$qn18dyear)
 summary(UNSR16$qn18dyear)
 
 
-# Making the WhenArrive Variable
+# Making the RESIDENCY Variable
+UNSR16$RESIDENCY<-2016-as.numeric(UNSR16$qn1jyear)
+UNSR17$RESIDENCY<-2017-as.numeric(UNSR17$qn1jyear)
+UNSR18$RESIDENCY<-2018-as.numeric(UNSR18$qn1jyear)
+UNSR19$RESIDENCY<-2019-as.numeric(UNSR19$qn1jyear)
+
+#Makingthe When Arrive variable
 UNSR16$WHENARRIVE<-as.numeric(UNSR16$qn1jyear)
 UNSR17$WHENARRIVE<-as.numeric(UNSR17$qn1jyear)
 UNSR18$WHENARRIVE<-as.numeric(UNSR18$qn1jyear)
@@ -913,13 +940,30 @@ UNSR18$PubHo<-factor(UNSR18$PubHo,levels = c(0,1), labels = c(" Not On PubHo", "
 
 UNSR19$PubHo<-factor(UNSR19$PubHo,levels = c(0,1), labels = c(" Not On PubHo", "On PubHo"))
 ## Making The number of public assistance programs a household uses. 
-UNSR16$FD <- (as.numeric(UNSR16$Foodstamps)-1)+(as.numeric(UNSR16$TANF)-1)+(as.numeric(UNSR16$RCA)-1)+(as.numeric(UNSR16$SSI)-1)+(as.numeric(UNSR16$GA)-1)+(as.numeric(UNSR16$Miscash)-1)+(as.numeric(UNSR16$PubHo)-1)
+UNSR16$NUM_PROGS <- (as.numeric(UNSR16$Foodstamps)-1)+(as.numeric(UNSR16$TANF)-1)+(as.numeric(UNSR16$RCA)-1)+(as.numeric(UNSR16$SSI)-1)+(as.numeric(UNSR16$GA)-1)+(as.numeric(UNSR16$Miscash)-1)+(as.numeric(UNSR16$PubHo)-1)
 
-UNSR17$FD <- (as.numeric(UNSR17$Foodstamps)-1)+(as.numeric(UNSR17$TANF)-1)+(as.numeric(UNSR17$RCA)-1)+(as.numeric(UNSR17$SSI)-1)+(as.numeric(UNSR17$GA)-1)+(as.numeric(UNSR17$Miscash)-1)+(as.numeric(UNSR17$PubHo)-1)
+UNSR17$NUM_PROGS <- (as.numeric(UNSR17$Foodstamps)-1)+(as.numeric(UNSR17$TANF)-1)+(as.numeric(UNSR17$RCA)-1)+(as.numeric(UNSR17$SSI)-1)+(as.numeric(UNSR17$GA)-1)+(as.numeric(UNSR17$Miscash)-1)+(as.numeric(UNSR17$PubHo)-1)
 
-UNSR18$FD <- as.numeric(UNSR18$Foodstamps)+as.numeric(UNSR18$TANF)+as.numeric(UNSR18$RCA)+as.numeric(UNSR18$SSI)+as.numeric(UNSR18$GA)+as.numeric(UNSR18$Miscash)+as.numeric(UNSR18$PubHo)
+UNSR18$NUM_PROGS <- as.numeric(UNSR18$Foodstamps)+as.numeric(UNSR18$TANF)+as.numeric(UNSR18$RCA)+as.numeric(UNSR18$SSI)+as.numeric(UNSR18$GA)+as.numeric(UNSR18$Miscash)+as.numeric(UNSR18$PubHo)-7
 
-UNSR19$FD <- as.numeric(UNSR19$Foodstamps)+as.numeric(UNSR19$TANF)+as.numeric(UNSR19$RCA)+as.numeric(UNSR19$SSI)+as.numeric(UNSR19$GA)+as.numeric(UNSR19$Miscash)+as.numeric(UNSR19$PubHo)
+UNSR19$NUM_PROGS <- as.numeric(UNSR19$Foodstamps)+as.numeric(UNSR19$TANF)+as.numeric(UNSR19$RCA)+as.numeric(UNSR19$SSI)+as.numeric(UNSR19$GA)+as.numeric(UNSR19$Miscash)+as.numeric(UNSR19$PubHo)-7
+
+```
+
+## Make dicotomous Financial Independence   
+```{r}
+
+UNSR16<-UNSR16 %>% mutate(FD=case_when(NUM_PROGS==0~0,
+                               NUM_PROGS>0~1))
+
+UNSR17<-UNSR17 %>% mutate(FD=case_when(NUM_PROGS==0~0,
+                               NUM_PROGS>0~1))
+
+UNSR18<-UNSR18 %>% mutate(FD=case_when(NUM_PROGS==0~0,
+                               NUM_PROGS>0~1))
+
+UNSR19<-UNSR19 %>% mutate(FD=case_when(NUM_PROGS==0~0,
+                               NUM_PROGS>0~1))
 
 ```
 
@@ -930,18 +974,18 @@ UNSR19$FD <- as.numeric(UNSR19$Foodstamps)+as.numeric(UNSR19$TANF)+as.numeric(UN
 
 
 which(colnames(UNSR19)== "WHENJOB")
-which(colnames(UNSR19)== "FD")
+which(colnames(UNSR19)== "NUM_PROGS")
 which(colnames(UNSR19)== "Weight_household")
 
 #include 181:220 for the household weights
 temp16<- UNSR16[,c(1,3,179,333:361)]
 which(colnames(UNSR16)== "WHENJOB")
-which(colnames(UNSR16)== "FD")
+which(colnames(UNSR16)== "NUM_PROGS")
 
 #@include 140:159 for the household replicant weights
 temp17<- UNSR17[,c(1,3,138,253:281)]
 which(colnames(UNSR17)== "WHENJOB")
-which(colnames(UNSR17)== "FD")
+which(colnames(UNSR17)== "NUM_PROGS")
 
 #include 154:180 for the household replicant weights. 
 temp18<- UNSR18[,c(1,3,152,281:309)]
@@ -954,12 +998,12 @@ temp19<- UNSR19[,c(1,6,146,265:293)]
 
 ```{r, echo=FALSE, }
 
-imp16<- mice(temp16, predictorMatrix = quickpred(temp16, exclude= c("hhid", "Weight_household","ORIGIN","MARSTAT", "Foodstamps", "TANF", "RCA", "GA","Miscash", "PubHo", "FD")),m = 21)
-imp17<- mice(temp17, predictorMatrix = quickpred(temp17, exclude= c("hhid", "Weight_household", "ORIGIN","MARSTAT", "Foodstamps", "TANF", "RCA", "GA","Miscash", "PubHo", "FD")),m = 21)
+imp16<- mice(temp16, predictorMatrix = quickpred(temp16, exclude= c("hhid", "Weight_household","ORIGIN","MARSTAT", "Foodstamps", "TANF", "RCA", "GA","Miscash", "PubHo", "NUM_PROGS")),m = 21)
+imp17<- mice(temp17, predictorMatrix = quickpred(temp17, exclude= c("hhid", "Weight_household", "ORIGIN","MARSTAT", "Foodstamps", "TANF", "RCA", "GA","Miscash", "PubHo", "NUM_PROGS")),m = 21)
 
-imp18<- mice(temp18, predictorMatrix = quickpred(temp18, exclude= c("hhid","ECOSECTOR", "Weight_household","ORIGIN","MARSTAT", "Foodstamps", "TANF", "RCA", "GA","Miscash", "PubHo", "FD")),m = 21)
+imp18<- mice(temp18, predictorMatrix = quickpred(temp18, exclude= c("hhid","ECOSECTOR", "Weight_household","ORIGIN","MARSTAT", "Foodstamps", "TANF", "RCA", "GA","Miscash", "PubHo", "NUM_PROGS")),m = 21)
 
-imp19<- mice(temp19, predictorMatrix = quickpred(temp19, exclude= c("hhid","ECOSECTOR", "Weight_household","ORIGIN","MARSTAT", "Foodstamps", "TANF", "RCA", "GA","Miscash", "PubHo", "FD")),m = 21)
+imp19<- mice(temp19, predictorMatrix = quickpred(temp19, exclude= c("hhid","ECOSECTOR", "Weight_household","ORIGIN","MARSTAT", "Foodstamps", "TANF", "RCA", "GA","Miscash", "PubHo", "NUM_PROGS")),m = 21)
 ```
 
 ```{r}
@@ -1029,15 +1073,7 @@ temp19$TILLJOBc<-imp19$data$TILLJOBc
 
 
 ```
-```{r}
 
-
-# Making the WhenArrive Variable a how many years in US variable
-imp16$data$WHENARRIVE<-abs(imp16$data$WHENARRIVE-2016)
-imp17$data$WHENARRIVE<-abs(imp17$data$WHENARRIVE-2017)
-imp18$data$WHENARRIVE<-abs(imp18$data$WHENARRIVE-2018)
-imp19$data$WHENARRIVE<-abs(imp19$data$WHENARRIVE-2019)
-```
 #### making the pooled and weighted dataset
 ```{r}
 
@@ -1065,7 +1101,7 @@ wPOOLED<- svydesign(ids=~hhid, weights =~Weight_household,data = POOLED )
 ```
 
 ```{r, echo=FALSE}
-impPOOLED<- mice(POOLED, predictorMatrix = quickpred(POOLED, exclude= c("hhid", "Weight_household","ORIGIN","MARSTAT", "Foodstamps", "TANF", "RCA", "GA","Miscash", "PubHo", "FD", "TILLJOB", "TILLJOBb")),m = 21)
+impPOOLED<- mice(POOLED, predictorMatrix = quickpred(POOLED, exclude= c("hhid", "Weight_household","ORIGIN","MARSTAT", "Foodstamps", "TANF", "RCA", "GA","Miscash", "PubHo", "NUM_PROGS", "TILLJOB", "TILLJOBb")),m = 21)
 
 ```
 
@@ -1220,7 +1256,7 @@ summary(temp16$CURENG)
 
 ##First FI Pooled "Basics" Nest
 ```{r}
-basicsPOOLED<- with(impPOOLED, svyglm(FI~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS, family = "binomial",design = wPOOLED))
+basicsPOOLED<- with(impPOOLED, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS, family = "binomial",design = wPOOLED))
 BPoolpool<-pool(basicsPOOLED)
 summary(BPoolpool)
 ```
@@ -1230,7 +1266,7 @@ summary(BPoolpool)
 
 ## Second Pre Context Nest
 ```{r}
-pcpool<- with(impPOOLED, svyglm(FI~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,ref="Iraq")+relevel(ECOSECTOR, "Other"), family = "binomial",design =wPOOLED ))
+pcpool<- with(impPOOLED, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,ref="Iraq")+relevel(ECOSECTOR, "Other"), family = "binomial",design =wPOOLED ))
 preconPOOLED<- pool(pcpool)
 summary(preconPOOLED)
 ```
@@ -1238,7 +1274,7 @@ summary(preconPOOLED)
 
 ## Third Post Context Nest
 ```{r}
-pocopool<- with(impPOOLED, svyglm(FI~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,ref="Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR, family = "binomial", design = wPOOLED))
+pocopool<- with(impPOOLED, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,ref="Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR, family = "binomial", design = wPOOLED))
 posconPOOLED<- pool(pocopool)
 summary(posconPOOLED)
 ```
@@ -1247,7 +1283,7 @@ summary(posconPOOLED)
 ## Fourth, Add Pre-Human Capital Vars
 ```{r}
 
-prehupool<- with(impPOOLED, svyglm(FI~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,ref="Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+EDUC+CONTEXT+PREENG , family = "binomial", design = wPOOLED))
+prehupool<- with(impPOOLED, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,ref="Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+EDUC+CONTEXT+PREENG , family = "binomial", design = wPOOLED))
 prehuPOOLED<- pool(prehupool)
 summary(prehuPOOLED)
 ```
@@ -1256,20 +1292,20 @@ summary(prehuPOOLED)
 #Fith, the Final Model (Use this model for intra-model prediction comparisons)
 ```{r}
 
-pohupool<- with(impPOOLED, svyglm(FI~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,ref="Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+EDUC+CONTEXT+PREENG+CURENGEN+CUREMPT+CURENG+relevel(URECOSEC, ref=2)+TILLJOBb+WEEKHOUR , family = "binomial", design =  wPOOLED ))
+pohupool<- with(impPOOLED, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,ref="Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+EDUC+CONTEXT+PREENG+CURENGEN+CUREMPT+CURENG+relevel(URECOSEC, ref=2)+TILLJOBb+WEEKHOUR , family = "binomial", design =  wPOOLED ))
 posthuPOOLED<- pool(pohupool)
-summary(posthuPOOLED)
+a<-summary(posthuPOOLED)
 ```
 ## Comparing Results with unimputed data
 ```{r}
-unweighted_POOLED_ES<-svyglm(FI~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN, ref="Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+EDUC+PREENG+CURENGEN+CUREMPT+CURENG+relevel(URECOSEC, ref=2)+TILLJOBb+WEEKHOUR , family = "binomial", design = wPOOLED)
+unweighted_POOLED_ES<-svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN, ref="Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+EDUC+PREENG+CURENGEN+CUREMPT+CURENG+relevel(URECOSEC, ref=2)+TILLJOBb+WEEKHOUR , family = "binomial", design = wPOOLED)
 
 unweighted_POOLED_ES$aic
 ```
 ## What about factorizing survey year?
 ```{r}
 
-pohupool<- with(impPOOLED, svyglm(FI~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+relevel(factor(SVYYR), ref = "2016")+EDUC+PREENG+CURENGEN+CUREMPT+CURENG+relevel(URECOSEC, ref=2)+TILLJOB+WEEKHOUR , family = "binomial", design = wPOOLED))
+pohupool<- with(impPOOLED, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+relevel(factor(SVYYR), ref = "2016")+EDUC+PREENG+CURENGEN+CUREMPT+CURENG+relevel(URECOSEC, ref=2)+TILLJOB+WEEKHOUR , family = "binomial", design = wPOOLED))
 posthuPOOLED<- pool(pohupool)
 summary(posthuPOOLED)
 ```
@@ -1283,7 +1319,7 @@ summary(posthuPOOLED)
 posconPOOLED$glanced
 POOLED$URECOSEC<-relevel(POOLED$URECOSEC, ref=2)
 #making the basics+human capital model
-compareFIpool<- with(impPOOLED, svyglm(FI~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+EDUC+PREENG+CURENGEN+CUREMPT+CURENG+URECOSEC+TILLJOBb , family = "binomial", design = wPOOLED))
+compareFIpool<- with(impPOOLED, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+EDUC+PREENG+CURENGEN+CUREMPT+CURENG+URECOSEC+TILLJOBb , family = "binomial", design = wPOOLED))
 compareFIHCPOOLED<- pool(compareFIpool)
 compareFIHCPOOLED$glanced
 #The human capital one has the lower AIC and BIC
@@ -1293,14 +1329,14 @@ compareFIHCPOOLED$glanced
 ```{r}
 
 POOLED$URECOSEC<-relevel(POOLED$URECOSEC, ref=2)
-modela <- svyglm(FI~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+EDUC+PREENG+CURENGEN+CUREMPT+CURENG+relevel(URECOSEC, ref=2)+TILLJOB+WEEKHOUR , family = "binomial", design = wPOOLED)
+modela <- svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+EDUC+PREENG+CURENGEN+CUREMPT+CURENG+relevel(URECOSEC, ref=2)+TILLJOB+WEEKHOUR , family = "binomial", design = wPOOLED)
 
 summary(modela)
 #Making the hypothetical dataframe for a maximally advantaged contextual person. 
-maxconpred <- data.frame(WHENARRIVE=factor(3), SEX="Male", AGE=39.7, numppl=3, MARSTAT="Never Married", TILLJOB=1, EDUC=12, ECOSECTOR="Professional", URECOSEC="Retail/Sales", ORIGIN="Cuba", PREENG="Not Well", HOSTREG="South", CURENGEN="No", CUREMPT="No", CURENG="Well", DEPENDS=1, SVYYR=2018, WEEKHOUR=38.33, TILLJOBb=1)
+maxconpred <- data.frame(RESIDENCY=factor(3), SEX="Male", AGE=39.7, numppl=3, MARSTAT="Never Married", TILLJOB=1, EDUC=12, ECOSECTOR="Professional", URECOSEC="Retail/Sales", ORIGIN="Cuba", PREENG="Not Well", HOSTREG="South", CURENGEN="No", CUREMPT="No", CURENG="Well", DEPENDS=1, SVYYR=2018, WEEKHOUR=38.33, TILLJOBb=1)
 
 
-maxhumpred <- data.frame(WHENARRIVE=factor(3), SEX="Male", AGE=39.7, numppl=3, MARSTAT="Never Married", TILLJOB=1, EDUC=20, ECOSECTOR="Other", URECOSEC= "Professional/ED/Health/SocialServices", ORIGIN="Iraq", PREENG="Very Well", HOSTREG="West", CURENGEN="No", CUREMPT="No", CURENG="Very Well", DEPENDS=1, SVYYR=2016, WEEKHOUR=38.33, TILLJOBb=1)
+maxhumpred <- data.frame(RESIDENCY=factor(3), SEX="Male", AGE=39.7, numppl=3, MARSTAT="Never Married", TILLJOB=1, EDUC=20, ECOSECTOR="Other", URECOSEC= "Professional/ED/Health/SocialServices", ORIGIN="Iraq", PREENG="Very Well", HOSTREG="West", CURENGEN="No", CUREMPT="No", CURENG="Very Well", DEPENDS=1, SVYYR=2016, WEEKHOUR=38.33, TILLJOBb=1)
 #NEED to Add KIDS to make predictions
 #predict(modela, newdata =maxconpred, type = "response")
 
@@ -1311,7 +1347,7 @@ maxhumpred <- data.frame(WHENARRIVE=factor(3), SEX="Male", AGE=39.7, numppl=3, M
 #2016 Fith, the Final Model (Use this model for intra-model prediction comparisons)
 ```{r}
 
-pohu19<- with(imp19, svyglm(FI~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+HOSTREG+EDUC+CONTEXT+PREENG+ CURENGEN+CUREMPT+CURENG+relevel(URECOSEC, ref=2)+ TILLJOBb+WEEKHOUR , family = "binomial", design = wtemp19))
+pohu19<- with(imp19, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+HOSTREG+EDUC+CONTEXT+PREENG+ CURENGEN+CUREMPT+CURENG+relevel(URECOSEC, ref=2)+ TILLJOBb+WEEKHOUR , family = "binomial", design = wtemp19))
 posthu19<- pool(pohu19)
 summary(posthu19)
 ```
@@ -1319,7 +1355,7 @@ summary(posthu19)
 # 2017 FI Models 
 ## Basicis Model
 ```{r}
-basics17<- with(imp17, svyglm(FI~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS, family = "binomial",design = wtemp17))
+basics17<- with(imp17, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS, family = "binomial",design = wtemp17))
 B17pool<-pool(basics17)
 summary(B17pool)
 
@@ -1328,14 +1364,14 @@ summary(B17pool)
 
 ## Second Pre Context Nest
 ```{r}
-pc17<- with(imp17, svyglm(FI~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other"), family = "binomial",design =wtemp17 ))
+pc17<- with(imp17, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other"), family = "binomial",design =wtemp17 ))
 precon17<- pool(pc17)
 summary(precon17)
 ```
 
 ## Third Post Context Nest
 ```{r}
-poco17<- with(imp17, svyglm(FI~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR, family = "binomial", design = wtemp17))
+poco17<- with(imp17, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR, family = "binomial", design = wtemp17))
 poscon17<- pool(poco17)
 summary(poscon17)
 ```
@@ -1343,7 +1379,7 @@ summary(poscon17)
 ## Fourth, Add Pre-Human Capital Vars
 ```{r}
 
-prehu17<- with(imp17, svyglm(FI~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+EDUC+CONTEXT+PREENG , family = "binomial", design = wtemp17))
+prehu17<- with(imp17, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+EDUC+CONTEXT+PREENG , family = "binomial", design = wtemp17))
 prehu17<- pool(prehu17)
 summary(prehu17)
 
@@ -1352,7 +1388,7 @@ summary(prehu17)
 #Fith, the Final Model (Use this model for intra-model prediction comparisons)
 ```{r}
 
-pohu17<- with(imp17, svyglm(FI~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+HOSTREG+relevel(URECOSEC, ref=2)+EDUC+CONTEXT+relevel(ECOSECTOR, "Other")+PREENG+ CURENGEN+CUREMPT+CURENG+ TILLJOBb+WEEKHOUR , family = "binomial", design = wtemp17))
+pohu17<- with(imp17, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+HOSTREG+relevel(URECOSEC, ref=2)+EDUC+CONTEXT+relevel(ECOSECTOR, "Other")+PREENG+ CURENGEN+CUREMPT+CURENG+ TILLJOBb+WEEKHOUR , family = "binomial", design = wtemp17))
 posthu17<- pool(pohu17)
 summary(posthu17)
 ```
@@ -1360,7 +1396,7 @@ summary(posthu17)
 # 2018 FI Models 
 ## Basicis Model
 ```{r}
-basics18<- with(imp18, svyglm(FI~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS, family = "binomial",design = wtemp18))
+basics18<- with(imp18, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS, family = "binomial",design = wtemp18))
 B18pool<-pool(basics18)
 summary(B18pool)
 
@@ -1369,14 +1405,14 @@ summary(B18pool)
 
 ## Second Pre Context Nest
 ```{r}
-pc18<- with(imp18, svyglm(FI~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other"), family = "binomial",design =wtemp18 ))
+pc18<- with(imp18, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other"), family = "binomial",design =wtemp18 ))
 precon18<- pool(pc18)
 summary(precon18)
 ```
 
 ## Third Post Context Nest
 ```{r}
-poco18<- with(imp18, svyglm(FI~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR, family = "binomial", design = wtemp18))
+poco18<- with(imp18, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR, family = "binomial", design = wtemp18))
 poscon18<- pool(poco18)
 summary(poscon18)
 ```
@@ -1384,7 +1420,7 @@ summary(poscon18)
 ## Fourth, Add Pre-Human Capital Vars
 ```{r}
 
-prehu18<- with(imp18, svyglm(FI~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+EDUC+CONTEXT+PREENG , family = "binomial", design = wtemp18))
+prehu18<- with(imp18, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+EDUC+CONTEXT+PREENG , family = "binomial", design = wtemp18))
 prehu18<- pool(prehu18)
 summary(prehu18)
 
@@ -1393,7 +1429,7 @@ summary(prehu18)
 #Fith, the Final Model (Use this model for intra-model prediction comparisons)
 ```{r}
 
-pohu18<- with(imp18, svyglm(FI~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+HOSTREG+relevel(URECOSEC, ref=2)+EDUC+CONTEXT+relevel(ECOSECTOR, "Other")+PREENG+ CURENGEN+CUREMPT+CURENG+ TILLJOBb+WEEKHOUR , family = "binomial", design = wtemp18))
+pohu18<- with(imp18, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+HOSTREG+relevel(URECOSEC, ref=2)+EDUC+CONTEXT+relevel(ECOSECTOR, "Other")+PREENG+ CURENGEN+CUREMPT+CURENG+ TILLJOBb+WEEKHOUR , family = "binomial", design = wtemp18))
 posthu18<- pool(pohu18)
 summary(posthu18)
 ```
@@ -1402,7 +1438,7 @@ summary(posthu18)
 
 ## First Pooled "Basics" Nest
 ```{r}
-basicsTJPOOLED<- with(impPOOLED, svyglm(TILLJOB~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS, family = "binomial",design = wPOOLED))
+basicsTJPOOLED<- with(impPOOLED, svyglm(TILLJOB~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS, family = "binomial",design = wPOOLED))
 BPoolTJpool<-pool(basicsTJPOOLED)
 summary(BPoolTJpool)
 ```
@@ -1410,7 +1446,7 @@ summary(BPoolTJpool)
 
 ## Second Pre Context Nest
 ```{r}
-pcTJpool<- with(impPOOLED,svyglm(TILLJOB~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+relevel(ORIGIN,"Iraq" )+relevel(ECOSECTOR,"Other"), family = "binomial",design =wPOOLED ))
+pcTJpool<- with(impPOOLED,svyglm(TILLJOB~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+relevel(ORIGIN,"Iraq" )+relevel(ECOSECTOR,"Other"), family = "binomial",design =wPOOLED ))
 preconTJPOOLED<- pool(pcTJpool)
 summary(preconTJPOOLED)
 ```
@@ -1418,7 +1454,7 @@ summary(preconTJPOOLED)
 
 ## Third Post Context Nest
 ```{r}
-pocoTJpool<- with(impPOOLED, svyglm(TILLJOB~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+relevel(ORIGIN,"Iraq")+relevel(ECOSECTOR,ref = "Other")+HOSTREG+SVYYR, family = "binomial", design = wPOOLED))
+pocoTJpool<- with(impPOOLED, svyglm(TILLJOB~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+relevel(ORIGIN,"Iraq")+relevel(ECOSECTOR,ref = "Other")+HOSTREG+SVYYR, family = "binomial", design = wPOOLED))
 posconTJPOOLED<- pool(pocoTJpool)
 summary(posconTJPOOLED)
 ```
@@ -1426,7 +1462,7 @@ summary(posconTJPOOLED)
 
 ## Fourth, Add Pre-Human Capital Vars (Final? because Till job may be before current variables)
 ```{r}
-prezhuTJpool<- with(impPOOLED, svyglm(TILLJOB~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+relevel(ORIGIN,"Iraq")+relevel(ECOSECTOR,"Other")+HOSTREG+SVYYR+EDUC+PREENG, family = "binomial", design = wPOOLED))
+prezhuTJpool<- with(impPOOLED, svyglm(TILLJOB~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+relevel(ORIGIN,"Iraq")+relevel(ECOSECTOR,"Other")+HOSTREG+SVYYR+EDUC+PREENG, family = "binomial", design = wPOOLED))
 prezhuTJPOOLED<- pool(prezhuTJpool)
 summary(prezhuTJPOOLED)
 
@@ -1435,49 +1471,49 @@ summary(prezhuTJPOOLED)
 ## Firth, the final model
 ```{r}
 
-prehuTJpool<- with(impPOOLED, svyglm(TILLJOB~ as.numeric(WHENARRIVE)+ SEX+AGE+numppl+MARSTAT+DEPENDS+relevel(ORIGIN,"Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+EDUC+CONTEXT+EDUC+PREENG+CURENGEN:PREENG+CUREMPT+CURENG, family = "binomial", design = wPOOLED))
+prehuTJpool<- with(impPOOLED, svyglm(TILLJOB~ as.numeric(RESIDENCY)+ SEX+AGE+numppl+MARSTAT+DEPENDS+relevel(ORIGIN,"Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+EDUC+CONTEXT+EDUC+PREENG+CURENGEN:PREENG+CUREMPT+CURENG, family = "binomial", design = wPOOLED))
 prehuTJPOOLED<- pool(prehuTJpool)
 summary(prehuTJPOOLED)
 ```
 
 ```{r}
 #Supplemantal Models
-TJ_pooled_unmiced<-svyglm(TILLJOB~ as.numeric(WHENARRIVE)+ SEX+AGE+numppl+MARSTAT+DEPENDS+relevel(ORIGIN,"Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+EDUC+CONTEXT+EDUC+PREENG+CURENGEN+CUREMPT+CURENG, family = "binomial", design = wPOOLED)
+TJ_pooled_unmiced<-svyglm(TILLJOB~ as.numeric(RESIDENCY)+ SEX+AGE+numppl+MARSTAT+DEPENDS+relevel(ORIGIN,"Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+EDUC+CONTEXT+EDUC+PREENG+CURENGEN+CUREMPT+CURENG, family = "binomial", design = wPOOLED)
 summary(TJ_pooled_unmiced)
-vif(TJ_pooled_unmiced)
+TJ_pooled_unmiced
 #2016
-summary(svyglm(TILLJOB~ as.numeric(WHENARRIVE)+ SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,"Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+EDUC+CONTEXT+EDUC+PREENG+CURENGEN+CUREMPT+CURENG, family = "binomial", design = wtemp16))
+summary(svyglm(TILLJOB~ as.numeric(RESIDENCY)+ SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,"Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+EDUC+CONTEXT+EDUC+PREENG+CURENGEN+CUREMPT+CURENG, family = "binomial", design = wtemp16))
 
 #2017
-summary(svyglm(TILLJOB~ as.numeric(WHENARRIVE)+ SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,"Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+EDUC+CONTEXT+EDUC+PREENG+CURENGEN+CUREMPT+CURENG, family = "binomial", design = wtemp17))
+summary(svyglm(TILLJOB~ as.numeric(RESIDENCY)+ SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,"Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+EDUC+CONTEXT+EDUC+PREENG+CURENGEN+CUREMPT+CURENG, family = "binomial", design = wtemp17))
 
 #2018 #have to take out Pre=EcoSector because no variation. This is also true for the 2019 model. 
-summary(svyglm(TILLJOB~ as.numeric(WHENARRIVE)+ SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,"Iraq")++HOSTREG+EDUC+CONTEXT+EDUC+PREENG+CURENGEN+CUREMPT+CURENG, family = "binomial", design = wtemp18))
+summary(svyglm(TILLJOB~ as.numeric(RESIDENCY)+ SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,"Iraq")++HOSTREG+EDUC+CONTEXT+EDUC+PREENG+CURENGEN+CUREMPT+CURENG, family = "binomial", design = wtemp18))
 
 
 #2019
-summary(svyglm(TILLJOB~ as.numeric(WHENARRIVE)+ SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,"Iraq")+HOSTREG+EDUC+CONTEXT+EDUC+PREENG+CURENGEN+CUREMPT+CURENG, family = "binomial", design = wtemp19))
+summary(svyglm(TILLJOB~ as.numeric(RESIDENCY)+ SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,"Iraq")+HOSTREG+EDUC+CONTEXT+EDUC+PREENG+CURENGEN+CUREMPT+CURENG, family = "binomial", design = wtemp19))
 ```
 
 # The comparisons between contexts and human capital
 ```{r}
 posconTJPOOLED$glanced
 
-compareTJpool<- with(impPOOLED, svyglm(TILLJOB~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+EDUC+PREENG+CURENGEN+CUREMPT+CURENG+URECOSEC , family = "binomial", design = wPOOLED))
+compareTJpool<- with(impPOOLED, svyglm(TILLJOB~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+EDUC+PREENG+CURENGEN+CUREMPT+CURENG+URECOSEC , family = "binomial", design = wPOOLED))
 compareTJHCPOOLED<- pool(compareTJpool)
 compareTJHCPOOLED$glanced
 ## Contexts are better at the AIC and BIC measures, but what about Predicted probabilities?
 ```
 ### PRedicted Probabilities
 ```{r}
-modelb <- svyglm(TILLJOB~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+EDUC+PREENG+CURENGEN+CUREMPT+CURENG+URECOSEC+TILLJOBb , family = "binomial", design = wPOOLED)
+modelb <- svyglm(TILLJOB~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+EDUC+PREENG+CURENGEN+CUREMPT+CURENG+URECOSEC+TILLJOBb , family = "binomial", design = wPOOLED)
 
 
 #Making the hypothetical dataframe for a maximally advantaged contextual person. 
-maxconpred <- data.frame(WHENARRIVE=factor(3), SEX="Male", AGE=39.7, numppl=3, MARSTAT="Never Married", TILLJOB=1, EDUC=12, ECOSECTOR="Professional", URECOSEC="Retail/Sales", ORIGIN="Cuba", PREENG="Not Well", HOSTREG="South", CURENGEN="No", CUREMPT="No", CURENG="Well", DEPENDS=1, KIDS= SVYYR=2018, WEEKHOUR=38.33, TILLJOBb=1)
+maxconpred <- data.frame(RESIDENCY=factor(3), SEX="Male", AGE=39.7, numppl=3, MARSTAT="Never Married", TILLJOB=1, EDUC=12, ECOSECTOR="Professional", URECOSEC="Retail/Sales", ORIGIN="Cuba", PREENG="Not Well", HOSTREG="South", CURENGEN="No", CUREMPT="No", CURENG="Well", DEPENDS=1, KIDS=1, SVYYR=2018, WEEKHOUR=38.33, TILLJOBb=1)
 
 
-maxhumpred <- data.frame(WHENARRIVE=factor(3), SEX="Male", AGE=39.7, numppl=3, MARSTAT="Never Married", TILLJOB=1, EDUC=20, ECOSECTOR="Other", URECOSEC= "Professional/ED/Health/SocialServices", ORIGIN="Iraq", PREENG="Very Well", HOSTREG="West", CURENGEN="No", CUREMPT="No", CURENG="Very Well", DEPENDS=1, SVYYR=2016, WEEKHOUR=38.33, TILLJOBb=1)
+maxhumpred <- data.frame(RESIDENCY=factor(3), SEX="Male", AGE=39.7, numppl=3, MARSTAT="Never Married", TILLJOB=1, EDUC=20, ECOSECTOR="Other", URECOSEC= "Professional/ED/Health/SocialServices", ORIGIN="Iraq", PREENG="Very Well", HOSTREG="West", CURENGEN="No", CUREMPT="No", CURENG="Very Well", DEPENDS=1, KIDS=1, SVYYR=2016, WEEKHOUR=38.33, TILLJOBb=1)
 
 predict(modelb, newdata =maxconpred, type = "response")
 
@@ -1487,7 +1523,7 @@ predict(modelb, newdata =maxhumpred, type = "response")
 
 ##First FI Pooled "Basics" Nest
 ```{r}
-WHbasicsPOOLED<- with(impPOOLED, svyglm(log(WEEKHOUR +1089/40) ~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS,design = wPOOLED))
+WHbasicsPOOLED<- with(impPOOLED, svyglm(log(WEEKHOUR +1089/40) ~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS,design = wPOOLED))
 WHBPoolpool<-pool(WHbasicsPOOLED)
 summary(WHBPoolpool)
 ```
@@ -1497,7 +1533,7 @@ summary(WHBPoolpool)
 
 ## Second Pre Context Nest
 ```{r}
-WHpcpool<- with(impPOOLED, svyglm(log(WEEKHOUR +1089/40)~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other"),design =wPOOLED ))
+WHpcpool<- with(impPOOLED, svyglm(log(WEEKHOUR +1089/40)~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other"),design =wPOOLED ))
 WHpreconPOOLED<- pool(WHpcpool)
 summary(WHpreconPOOLED)
 ```
@@ -1505,7 +1541,7 @@ summary(WHpreconPOOLED)
 
 ## Third Post Context Nest
 ```{r}
-WHpocopool<- with(impPOOLED, svyglm(log(WEEKHOUR +1089/40)~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR, design = wPOOLED))
+WHpocopool<- with(impPOOLED, svyglm(log(WEEKHOUR +1089/40)~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR, design = wPOOLED))
 WHposconPOOLED<- pool(WHpocopool)
 summary(WHposconPOOLED)
 ```
@@ -1514,7 +1550,7 @@ summary(WHposconPOOLED)
 ## Fourth, Add Pre-Human Capital Vars
 ```{r}
 
-WHprehupool<- with(impPOOLED, svyglm(log(WEEKHOUR +1089/40)~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+EDUC+CONTEXT+PREENG, design = wPOOLED))
+WHprehupool<- with(impPOOLED, svyglm(log(WEEKHOUR +1089/40)~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+EDUC+CONTEXT+PREENG, design = wPOOLED))
 WHprehuPOOLED<- pool(WHprehupool)
 summary(WHprehuPOOLED)
 
@@ -1525,7 +1561,7 @@ summary(WHprehuPOOLED)
 #Fith, the Final Model (Use this model for intra-model prediction comparisons)
 ```{r}
 
-WHpohupool<- with(impPOOLED, svyglm(log(WEEKHOUR +1089/40)~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+EDUC+CONTEXT+PREENG+CURENGEN+CUREMPT+CURENG+relevel(URECOSEC, ref=2)+TILLJOB+FI, design = wPOOLED))
+WHpohupool<- with(impPOOLED, svyglm(log(WEEKHOUR +1089/40)~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+EDUC+CONTEXT+PREENG+CURENGEN+CUREMPT+CURENG+relevel(URECOSEC, ref=2)+TILLJOB+FI, design = wPOOLED))
 WHposthuPOOLED<- pool(WHpohupool)
 summary(WHposthuPOOLED)
 
@@ -1537,7 +1573,7 @@ summary(WHposthuPOOLED)
 ```{r}
 WHposconPOOLED$glanced
 
-compareWHpool<- with(impPOOLED, svyglm(log(WEEKHOUR +1089/40)~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+EDUC+PREENG+CURENGEN+CUREMPT+CURENG+URECOSEC+TILLJOBb, design = wPOOLED))
+compareWHpool<- with(impPOOLED, svyglm(log(WEEKHOUR +1089/40)~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+EDUC+PREENG+CURENGEN+CUREMPT+CURENG+URECOSEC+TILLJOBb, design = wPOOLED))
 compareWHHCPOOLED<- pool(compareWHpool)
 compareWHHCPOOLED$glanced
 ## Contexts are better at the AIC and BIC measures, but what about Predicted probabilities?
@@ -1547,14 +1583,14 @@ compareWHHCPOOLED$glanced
 
 
 ```{r}
-modelc <- svyglm(log(WEEKHOUR +1089/40)~ as.numeric(WHENARRIVE)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+EDUC+PREENG+CURENGEN+CUREMPT+CURENG+URECOSEC+TILLJOBb, design = wPOOLED)
+modelc <- svyglm(log(WEEKHOUR +1089/40)~ as.numeric(RESIDENCY)+SEX+AGE+numppl+MARSTAT+DEPENDS+KIDS+EDUC+PREENG+CURENGEN+CUREMPT+CURENG+URECOSEC+TILLJOBb, design = wPOOLED)
 
 
 #Making the hypothetical dataframe for a maximally advantaged contextual person. 
-maxconpred <- data.frame(WHENARRIVE=factor(3), SEX="Male", AGE=39.7, numppl=3, MARSTAT="Never Married", TILLJOB=1, EDUC=12, ECOSECTOR="Professional", URECOSEC="Retail/Sales", ORIGIN="Cuba", PREENG="Not Well", HOSTREG="South", CURENGEN="No", CUREMPT="No", CURENG="Well", DEPENDS=1, SVYYR=2018, WEEKHOUR=38.33, TILLJOBb=1)
+maxconpred <- data.frame(RESIDENCY=factor(3), SEX="Male", AGE=39.7, numppl=3, MARSTAT="Never Married", KIDS=1, TILLJOB=1, EDUC=12, ECOSECTOR="Professional", URECOSEC="Retail/Sales", ORIGIN="Cuba", PREENG="Not Well", HOSTREG="South", CURENGEN="No", CUREMPT="No", CURENG="Well", DEPENDS=1, SVYYR=2018, WEEKHOUR=38.33, TILLJOBb=1)
 
 
-maxhumpred <- data.frame(WHENARRIVE=factor(3), SEX="Male", AGE=39.7, numppl=3, MARSTAT="Never Married", TILLJOB=1, EDUC=20, ECOSECTOR="Other", URECOSEC= "Professional/ED/Health/SocialServices", ORIGIN="Iraq", PREENG="Very Well", HOSTREG="West", CURENGEN="No", CUREMPT="No", CURENG="Very Well", DEPENDS=1, SVYYR=2016, WEEKHOUR=38.33, TILLJOBb=1)
+maxhumpred <- data.frame(RESIDENCY=factor(3), SEX="Male", AGE=39.7, numppl=3, MARSTAT="Never Married", KIDS=1, TILLJOB=1, EDUC=20, ECOSECTOR="Other", URECOSEC= "Professional/ED/Health/SocialServices", ORIGIN="Iraq", PREENG="Very Well", HOSTREG="West", CURENGEN="No", CUREMPT="No", CURENG="Very Well", DEPENDS=1, SVYYR=2016, WEEKHOUR=38.33, TILLJOBb=1)
 
 predict(modelc, newdata =maxconpred, type = "response")
 
@@ -1562,68 +1598,76 @@ predict(modelc, newdata =maxhumpred, type = "response")
 
 ```
 
+# The Group-by Descriptive I need
 
+```{r}
+result <- UNSR17 %>%
+  group_by(RESIDENCY, ui_soi_pubassist) %>%
+  summarise(count = n()) %>%
+  mutate(percent = count / sum(count) * 100)
+print(result)
+```
 # For Canadian Comparisons
 I need to find the proportion of economically self-sufficient refugees in each American cohort. They need to be weighted. 
 
 ```{r}
-USin19cohort14<- UNSR19[UNSR19$WHENARRIVE==2014,]
+USin19cohort14<- UNSR19[UNSR19$RESIDENCY==2014,]
 USin19cohort14<- USin19cohort14[!(is.na(USin19cohort14$hhid)),]
 USin19cohort14_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin19cohort14,na.rm=T)
 svymean(USin19cohort14$FI, USin19cohort14_w, na.rm=T)
 ```
 Now for USin19cohort15
 ```{r}
-USin19cohort15<- UNSR19[UNSR19$WHENARRIVE==2015,]
+USin19cohort15<- UNSR19[UNSR19$RESIDENCY==2015,]
 USin19cohort15<- USin19cohort15[!(is.na(USin19cohort15$hhid)),]
 USin19cohort15_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin19cohort15,na.rm=T)
 USin19cohort15$FI
 ```
 ```{r}
-USin19cohort16<- UNSR19[UNSR19$WHENARRIVE==2016,]
+USin19cohort16<- UNSR19[UNSR19$RESIDENCY==2016,]
 USin19cohort16<- USin19cohort16[!(is.na(USin19cohort16$hhid)),]
 USin19cohort16_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin19cohort16,na.rm=T)
 USin19cohort16$FI
 ```
 ```{r}
-USin19cohort17<- UNSR19[UNSR19$WHENARRIVE==2017,]
+USin19cohort17<- UNSR19[UNSR19$RESIDENCY==2017,]
 USin19cohort17<- USin19cohort17[!(is.na(USin19cohort17$hhid)),]
 USin19cohort17_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin19cohort17,na.rm=T)
 USin19cohort17$FI
 ```
 ```{r}
-USin19cohort18<- UNSR19[UNSR19$WHENARRIVE==2018,]
+USin19cohort18<- UNSR19[UNSR19$RESIDENCY==2018,]
 USin19cohort18<- USin19cohort18[!(is.na(USin19cohort18$hhid)),]
 USin19cohort18_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin19cohort18,na.rm=T)
 USin19cohort18$FI
 ```
 Now for the 2018.
 ```{r}
-USin18cohort17<- UNSR18[UNSR18$WHENARRIVE==2017,]
+USin18cohort17<- UNSR18[UNSR18$RESIDENCY==2017,]
 USin18cohort17<- USin18cohort17[!(is.na(USin18cohort17$hhid)),]
 USin18cohort17_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin18cohort17,na.rm=T)
 USin18cohort17$FI
 ```
 ```{r}
-USin18cohort16<- UNSR18[UNSR18$WHENARRIVE==2016,]
+USin18cohort16<- UNSR18[UNSR18$RESIDENCY==2016,]
 USin18cohort16<- USin18cohort16[!(is.na(USin18cohort16$hhid)),]
 USin18cohort16_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin18cohort16,na.rm=T)
 USin18cohort16$FI
 ```
 ```{r}
-USin18cohort15<- UNSR18[UNSR18$WHENARRIVE==2015,]
+USin18cohort15<- UNSR18[UNSR18$RESIDENCY==2015,]
 USin18cohort15<- USin18cohort15[!(is.na(USin18cohort15$hhid)),]
 USin18cohort15_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin18cohort15,na.rm=T)
 USin18cohort15$FI
 ```
 ```{r}
-USin18cohort14<- UNSR18[UNSR18$WHENARRIVE==2014,]
+USin18cohort14<- UNSR18[UNSR18$RESIDENCY==2014,]
 USin18cohort14<- USin18cohort14[!(is.na(USin18cohort14$hhid)),]
 USin18cohort14_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin18cohort14,na.rm=T)
 USin18cohort14$FI
 ```
 ```{r}
-USin18cohort13<- UNSR18[UNSR18$WHENARRIVE==2013,]
+USin18cohort13<- UNSR18[UNSR18$RESIDENCY==2013,]
 USin18cohort13<- USin18cohort13[!(is.na(USin18cohort13$hhid)),]
 USin18cohort13_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin18cohort13,na.rm=T)
 USin18cohort13$FI
@@ -1631,34 +1675,34 @@ USin18cohort13$FI
 Now for 2017
 
 ```{r}
-USin17cohort16<- UNSR17[UNSR17$WHENARRIVE==2016,]
+USin17cohort16<- UNSR17[UNSR17$RESIDENCY==2016,]
 USin17cohort16<- USin17cohort16[!(is.na(USin17cohort16$hhid)),]
 USin17cohort16_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin17cohort16,na.rm=T)
 svymean(USin17cohort16$FI, USin17cohort16_w, na.rm=T)
 ```
 ```{r}
-USin17cohort15<- UNSR17[UNSR17$WHENARRIVE==2015,]
+USin17cohort15<- UNSR17[UNSR17$RESIDENCY==2015,]
 USin17cohort15<- USin17cohort15[!(is.na(USin17cohort15$hhid)),]
 USin17cohort15_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin17cohort15,na.rm=T)
 svymean(USin17cohort15$FI, USin17cohort15_w, na.rm=T)
 ```
 
 ```{r}
-USin17cohort14<- UNSR17[UNSR17$WHENARRIVE==2014,]
+USin17cohort14<- UNSR17[UNSR17$RESIDENCY==2014,]
 USin17cohort14<- USin17cohort14[!(is.na(USin17cohort14$hhid)),]
 USin17cohort14_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin17cohort14,na.rm=T)
 svymean(USin17cohort14$FI, USin17cohort14_w, na.rm=T)
 ```
 
 ```{r}
-USin17cohort13<- UNSR17[UNSR17$WHENARRIVE==2013,]
+USin17cohort13<- UNSR17[UNSR17$RESIDENCY==2013,]
 USin17cohort13<- USin17cohort13[!(is.na(USin17cohort13$hhid)),]
 USin17cohort13_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin17cohort13,na.rm=T)
 svymean(USin17cohort13$FI, USin17cohort13_w, na.rm=T)
 ```
 
 ```{r}
-USin17cohort12<- UNSR17[UNSR17$WHENARRIVE==2012,]
+USin17cohort12<- UNSR17[UNSR17$RESIDENCY==2012,]
 USin17cohort12<- USin17cohort12[!(is.na(USin17cohort12$hhid)),]
 USin17cohort12_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin17cohort12,na.rm=T)
 svymean(USin17cohort12$FI, USin17cohort12_w, na.rm=T)
@@ -1666,34 +1710,120 @@ svymean(USin17cohort12$FI, USin17cohort12_w, na.rm=T)
 And 2016
 
 ```{r}
-USin16cohort15<- UNSR16[UNSR16$WHENARRIVE==2015,]
+USin16cohort15<- UNSR16[UNSR16$RESIDENCY==2015,]
 USin16cohort15<- USin16cohort15[!(is.na(USin16cohort15$hhid)),]
 USin16cohort15_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin16cohort15,na.rm=T)
 svymean(USin16cohort15$FI, USin16cohort15_w, na.rm=T)
 ```
 ```{r}
-USin16cohort14<- UNSR16[UNSR16$WHENARRIVE==2014,]
+USin16cohort14<- UNSR16[UNSR16$RESIDENCY==2014,]
 USin16cohort14<- USin16cohort14[!(is.na(USin16cohort14$hhid)),]
 USin16cohort14_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin16cohort14,na.rm=T)
 svymean(USin16cohort14$FI, USin16cohort14_w, na.rm=T)
 ```
 ```{r}
-USin16cohort13<- UNSR16[UNSR16$WHENARRIVE==2013,]
+USin16cohort13<- UNSR16[UNSR16$RESIDENCY==2013,]
 USin16cohort13<- USin16cohort13[!(is.na(USin16cohort13$hhid)),]
 USin16cohort13_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin16cohort13,na.rm=T)
 svymean(USin16cohort13$FI, USin16cohort13_w, na.rm=T)
 ```
 ```{r}
-USin16cohort12<- UNSR16[UNSR16$WHENARRIVE==2012,]
+USin16cohort12<- UNSR16[UNSR16$RESIDENCY==2012,]
 USin16cohort12<- USin16cohort12[!(is.na(USin16cohort12$hhid)),]
 USin16cohort12_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin16cohort12,na.rm=T)
 svymean(USin16cohort12$FI, USin16cohort12_w, na.rm=T)
 ```
 ```{r}
-USin16cohort11<- UNSR16[UNSR16$WHENARRIVE==2011,]
+USin16cohort11<- UNSR16[UNSR16$RESIDENCY==2011,]
 USin16cohort11<- USin16cohort11[!(is.na(USin16cohort11$hhid)),]
 USin16cohort11_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin16cohort11,na.rm=T)
-svymean(USin16cohort11$FI, USin16cohort11_w, na.rm=T)
+svymean(USin16cohort11$FD, USin16cohort11_w, na.rm=T)
+```
+
+# Now to seperate them male and female headed households (and use prettier and more consice code.)
+
+```{r}
+USin16cohort11<- UNSR16[UNSR16$RESIDENCY==2011 & UNSR16$SEX=="Male",]
+USin16cohort11<- USin16cohort11[!(is.na(USin16cohort11$hhid)),]
+USin16cohort11_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin16cohort11,na.rm=T)
+svymean(USin16cohort11$FD, USin16cohort11_w, na.rm=T)
+```
+
+```{r}
+f_d_16<- function(data=UNSR16){
+    cohorts16<- list()
+  cohorts16$cohort<-list()
+  cohorts16$cohort<-split(data, data$RESIDENCY)
+  cohorts16$by_sex<-list()
+  for (i in seq_along(cohorts16$cohort)){
+    each <- cohorts16$cohort[[i]]
+    cohorts16$by_sex[[i]]<- split(each, each$SEX)
+  }
+  for (by_sex_list in cohorts16$by_sex){
+      for (each in by_sex_list){
+    design= svydesign(ids=~hhid, weights =~Weight_household,data = each,na.rm=T)
+    holder<-svymean(each$FD, design = design, na.rm = T)
+    cohorts16$means_by_sex<-append(cohorts16$means_by_sex, list(holder))
+      }
+    
+  }
+    for (each_cohort in list(cohorts16$cohort)){
+      for(each in each_cohort){
+    design= svydesign(ids=~hhid, weights =~Weight_household,data = each,na.rm=T)
+    holder<-svymean(each$FD, design = design, na.rm = T)
+    cohorts16$cohort_means<-append(cohorts16$cohort_means, list(holder))
+      }
+      }
+    return(cohorts16)
+    }
+```
+
+
+```{r}
+f_d_16 <- function(data = UNSR16) {
+  cohorts16 <- list()
+  cohorts16$cohort <- split(data, data$WHENARRIVE)
+  cohorts16$by_sex <- list()
+  cohorts16$means_by_sex <- list()
+  cohorts16$cohort_means <- list()
+  
+  # Naming the by_sex list
+  for (i in seq_along(cohorts16$cohort)) {
+    each <- cohorts16$cohort[[i]]
+    cohorts16$by_sex[[i]] <- split(each, each$SEX)
+    names(cohorts16$by_sex)[i] <- unique(each$WHENARRIVE)
+  }
+  
+  # Calculating means by sex
+  for (WHENARRIVE in names(cohorts16$by_sex)) {
+    by_sex_list <- cohorts16$by_sex[[WHENARRIVE]]
+    for (sex in names(by_sex_list)) {
+      each <- by_sex_list[[sex]]
+      design <- svydesign(ids = ~hhid, weights = ~Weight_household, data = each, na.rm = TRUE)
+      holder <- svymean(~FD, design = design, na.rm = TRUE)
+      cohorts16$means_by_sex[[paste(WHENARRIVE, sex, sep = "_")]] <- holder
+    }
+  }
+  
+  # Calculating means for each cohort
+  for (WHENARRIVE in names(cohorts16$cohort)) {
+    each <- cohorts16$cohort[[WHENARRIVE]]
+    design <- svydesign(ids = ~hhid, weights = ~Weight_household, data = each, na.rm = TRUE)
+    holder <- svymean(~FD, design = design, na.rm = TRUE)
+    cohorts16$cohort_means[[WHENARRIVE]] <- holder
+  }
+  
+  return(cohorts16)
+}
+
+```
+
+```{r}
+cohorts16<-f_d_16(data = UNSR16)
+cohorts17<-f_d_16(data = UNSR17)
+cohorts18<-f_d_16(data = UNSR18)
+cohorts19<-f_d_16(data = UNSR19)
+
 ```
 
 
