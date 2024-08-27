@@ -20,19 +20,19 @@ library(haven)
 
 ```{r}
 
-UNASR16 <- read_dta("C:/Users/paulb/OneDrive/Documents/Refugee/2016/2016-ASR_Public_Use_File.dta")
+UNASR16 <- read_dta("P:/Refugee Data/Combined ASR/2016/2016-ASR_Public_Use_File.dta")
 #View(ASR16)
 
 
-UNASR17 <- read_dta("C:/Users/paulb/OneDrive/Documents/Refugee/2017/2017 ASR_Public_Use_File (1).dta")
+UNASR17 <- read_dta("P:/Refugee Data/Combined ASR/2017/2017 ASR_Public_Use_File.dta")
 #View(ASR17)
 
 
-UNASR18 <- read_dta("C:/Users/paulb/OneDrive/Documents/Refugee/2018/2018 ASR_Public_Use_File.dta")
+UNASR18 <- read_dta("P:/Refugee Data/Combined ASR/2018/2018 ASR_Public_Use_File.dta")
 #View(ASR18)
 
 
-UNASR19 <- read_dta("C:/Users/paulb/OneDrive/Documents/Refugee/2019/2019 ASR_Public_Use_File.dta")
+UNASR19 <- read_dta("P:/Refugee Data/Combined ASR/2019/2019 ASR_Public_Use_File.dta")
 #View(ASR19)
 ```
 
