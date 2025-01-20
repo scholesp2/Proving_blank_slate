@@ -1,0 +1,241 @@
+---
+title: "Comparisons Between US and Canadian Refugee Cohorts"
+author: "Paul Scholes"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Packages
+
+```{r}
+library(tidyverse)
+library(gridExtra)
+library(lme4)
+library(modelsummary)
+```
+# Loading in the Data
+
+```{r}
+#Use Years_in<6 for all cohorts
+CA<-read.csv(file= "P:/Refugee Data/Canadian Data/CAUS16-21.csv" ) %>% 
+    fill(Resettlement_type) %>% mutate(Prop_FD= (Percent_FD*.01)) %>% mutate(Moe95= case_when(Resettlement_type== "US_Gov"~ (1.645*(sqrt(Prop_FD*(1-Prop_FD)/Total_persons))),
+    .default=0)) %>% filter(!is.na(Percent_FD)) %>% filter((Reference_period-Admission_year)==5) %>% group_split(Sex, Resettlement_type)
+names(CA) <- sapply(CA, function(df) paste0(df$Sex[1],df$Reference_period[1], df$Resettlement_type[1], "_"))
+
+```
+
+```{r}
+cor1<-cor(CA$All_sexes2016Gov_$Percent_FD, CA$All_sexes2016USGov_$Percent_FD)
+CA$All_sexes2017Gov_<- CA$All_sexes2017Gov_[CA$All_sexes2017Gov_$Admission_year!=2011,]
+cor2<-cor(CA$All_sexes2017Gov_$Percent_FD, CA$All_sexes2017USGov_$Percent_FD)
+CA$All_sexes2018Gov_<- CA$All_sexes2018Gov_[CA$All_sexes2018Gov_$Admission_year>=2013,]
+cor3<-cor(CA$All_sexes2018Gov_$Percent_FD, CA$All_sexes2018USGov_$Percent_FD)
+# The cors are all really high except for 2019, which is only modestly high at ~.39
+CA$All_sexes2019Gov_<- CA$All_sexes2019Gov_[CA$All_sexes2019Gov_$Admission_year>=2014,]
+cor4<-cor(CA$All_sexes2019Gov_$Percent_FD, CA$All_sexes2019USGov_$Percent_FD)
+CA$All_sexes2020Gov_<- CA$All_sexes2020Gov_[CA$All_sexes2020Gov_$Admission_year>=2015,]
+cor5<-cor(CA$All_sexes2020Gov_$Percent_FD, CA$All_sexes2020USGov_$Percent_FD)
+# Mean cor should probably be high
+mean_cor<- sum(cor1, cor2, cor3, cor4)/4
+print(mean_cor)
+#And what about average distance?
+ave_distance<-sum(abs(CA$All_sexes2016Gov_$Percent_FD-CA$All_sexes2016USGov_$Percent_FD),abs(CA$All_sexes2017Gov_$Percent_FD-CA$All_sexes2017USGov_$Percent_FD), abs(CA$All_sexes2018Gov_$Percent_FD-CA$All_sexes2018USGov_$Percent_FD), abs(CA$All_sexes2019Gov_$Percent_FD-CA$All_sexes2019USGov_$Percent_FD))/20
+print(ave_distance)
+
+
+
+
+ave_distance<-sum(abs(CA$All_sexes2016Gov_$Percent_FD[1:4]-CA$All_sexes2016USGov_$Percent_FD[1:4]),abs(CA$All_sexes2017Gov_$Percent_FD[1:4]-CA$All_sexes2017USGov_$Percent_FD[1:4]), abs(CA$All_sexes2018Gov_$Percent_FD[1:4]-CA$All_sexes2018USGov_$Percent_FD[1:4]), abs(CA$All_sexes2019Gov_$Percent_FD[1:4]-CA$All_sexes2019USGov_$Percent_FD[1:4]))/16
+print(ave_distance)
+```
+
+```{r}
+# What about the average distance broken down by years in US?
+
+
+```
+#This only focuses on the Gov resettlement types
+```{r}
+CA<-read.csv(file= "P:/Refugee Data/Canadian Data/CAUS16-21.csv" ) %>% 
+    fill(Resettlement_type) %>% mutate(Prop_FD= (Percent_FD*.01)) %>% mutate(Moe95= case_when(Resettlement_type== "US_Gov"~ (1.645*(sqrt(Prop_FD*(1-Prop_FD)/Total_persons))),
+    .default=0)) %>% filter(!is.na(Percent_FD)) %>% filter(Resettlement_type== "US_Gov" | Resettlement_type=="CA_Gov") %>% group_split(Reference_period, Sex)
+
+
+names(CA) <- sapply(CA, function(df) paste0(df$Sex[1],df$Reference_period[1], "_"))
+```
+
+```{r}
+CA <-lapply(CA, function(df){
+  df[]<-lapply(df,function(col){
+    if (is.character(col) || is.factor(col)){
+      factor(col)
+    } else{
+      col
+    }
+  })
+  return(df)
+  })
+
+```
+
+
+```{r}
+ploter<- function(data,x=data$Admission_year,y=data$Prop_FD,groups=data$Resettlement_type, moe=data$Moe95){
+  ggplot(data, aes(x=x, y=y, group=groups)) + ggtitle(paste("Refugee Household Economic Self-sufficency in",data$Reference_period[1]))+
+    geom_line(aes(color=groups)) + geom_point(aes(color=groups))  +
+    geom_ribbon(aes(ymin=y-moe , ymax=y+moe, fill=groups, alpha=.8), show.legend = F) +
+    
+    scale_x_continuous(name = paste(data$Sex[1],"by arrival year")) + 
+    scale_y_continuous(name = "Proportion Using Any Public Assistance Program", limits= c(0,1))+theme_minimal()+guides(alpha="none")+
+    labs(color = "Resettlement Type")+
+    
+    scale_color_manual(values = c("CA_Gov" = "#ed0101", US_Gov= "#0c44ac"))+
+    scale_fill_manual(values=c("lightblue", "lightblue"))
+
+}
+
+
+```
+
+```{r}
+lapply(CA, ploter)
+```
+
+
+
+
+
+
+
+
+#This does all resettlement types
+```{r}
+CA<-read.csv(file= "P:/Refugee Data/Canadian Data/CAUS16-21.csv" ) %>% 
+    fill(Resettlement_type) %>% mutate(Prop_FD= (Percent_FD*.01)) %>% mutate(Moe95= case_when(Resettlement_type== "US_Gov"~ (1.645*(sqrt(Prop_FD*(1-Prop_FD)/Total_persons))),
+    .default=0)) %>% filter(!is.na(Percent_FD)) %>% filter(Resettlement_type== "US_Gov" | Resettlement_type=="CA_Gov" |Resettlement_type=="Private"|Resettlement_type=="Blend") %>% group_split(Reference_period, Sex)
+
+names(CA) <- sapply(CA, function(df) paste0(df$Sex[1],df$Reference_period[1], "_"))
+```
+
+```{r}
+CA <-lapply(CA, function(df){
+  df[]<-lapply(df,function(col){
+    if (is.character(col) || is.factor(col)){
+      factor(col, ordered = F)
+    } else{
+      col
+    }
+  })
+  return(df)
+  })
+
+```
+
+
+```{r}
+ploter<- function(data,x=data$Admission_year,y=data$Prop_FD,groups=data$Resettlement_type, moe=data$Moe95){
+  ggplot(data, aes(x=x, y=y, group=groups)) + 
+    geom_line(aes(color=groups)) + geom_point(aes(color=groups))  +
+    geom_ribbon(aes(ymin=y-moe , ymax=y+moe, fill=groups, alpha=.2), show.legend = F) +
+    
+    scale_x_continuous(name = paste(data$Sex[1],"in", data$Reference_period[1])) + 
+    scale_y_continuous(name = "Percent Using Any Public Assistance Program", limits= c(0,1))+theme_minimal()+guides(alpha=FALSE)+
+    labs(color = "Resettlement Type")+
+    
+    scale_color_manual(values = c("CA_Gov"= "#ed0101", "US_Gov"= "#0c44ac", "Blend"="yellow", "Private"="Green"))+
+    scale_fill_manual(values=c("lightblue", "lightblue", "lightblue", "lightblue"))
+
+}
+
+
+```
+
+```{r}
+lapply(CA, ploter)
+```
+
+# For regression Analysis
+```{r}
+CA<-read_csv(file = "P:/Refugee Data/Canadian Data/CAUS16-21.csv" ) %>% 
+    fill(Resettlement_type) %>% mutate(Prop_FD= (Percent_FD*.01)) %>% mutate(Moe95= case_when(Resettlement_type== "US_Gov"~ (1.645*(sqrt(Prop_FD*(1-Prop_FD)/Total_persons))),
+    .default=0)) %>% filter(!is.na(Percent_FD)) %>% filter(Resettlement_type== "US_Gov" | Resettlement_type=="CA_Gov"|Resettlement_type=="Private"|Resettlement_type=="Blend") %>% filter(Years_in <6 & Years_in>0) %>% filter(Sex!="All Sexes") %>% mutate(Admission_year= factor(Admission_year)) %>% mutate(Resettlement_type= relevel(factor(Resettlement_type), ref="CA_Gov"))
+# This data comes from Canada's expentiture reports, The migration and refugee board is a court, while the citizenship and migration does the resettlement. for canada, these numbers currently reflect the whole bill of the department https://open.canada.ca/data/en/dataset/fc6ba156-a167-4abd-b172-d1293efebe55/resource/82e0cd86-7918-4769-89aa-fbe2f0d57d64
+#, the ORR reports to congress https://www.acf.hhs.gov/report/annual-orr-reports-congress and 
+# PRM's budget found https://2009-2017.state.gov/j/prm/releases/docsforcongress/index.htm
+#The US takes the form of ORR+ PRM funding
+CA<- CA %>% mutate(Year_funding_mil= case_when(Admission_year==2011 & Resettlement_type!="US_Gov" ~1583.490747,
+                                                Admission_year==2012 & Resettlement_type!="US_Gov" ~1523.325468,
+                                                Admission_year==2013 & Resettlement_type!="US_Gov" ~1378.694695,
+                                                Admission_year==2014 & Resettlement_type!="US_Gov" ~1360.751108,
+                                                Admission_year==2015 & Resettlement_type!="US_Gov" ~1536.497266,
+                                                Admission_year==2016 & Resettlement_type!="US_Gov" ~1600.050249,
+                                                Admission_year==2017 & Resettlement_type!="US_Gov" ~1917.248913,
+                                                Admission_year==2018 & Resettlement_type!="US_Gov"~2403.858757,
+                                                Admission_year==2019 & Resettlement_type!="US_Gov"~3060.59952,
+                                                Admission_year==2020 & Resettlement_type!="US_Gov"~3159.57205,
+                                                Admission_year==2021 & Resettlement_type!="US_Gov"~3451.273279,
+                                                Admission_year==2011 & Resettlement_type=="US_Gov" ~729.5+357,
+                                                Admission_year==2012 & Resettlement_type=="US_Gov" ~768.3+340,
+                                                Admission_year==2013 & Resettlement_type=="US_Gov" ~999.4+310,
+                                                Admission_year==2014 & Resettlement_type=="US_Gov" ~1528+351,
+                                                Admission_year==2015 & Resettlement_type=="US_Gov" ~1557.129000+394.254,
+                                                Admission_year==2016 & Resettlement_type=="US_Gov" ~1655.963000+442.7,
+                                                Admission_year==2017 & Resettlement_type=="US_Gov" ~1655.963000+445,
+                                                Admission_year==2018 & Resettlement_type=="US_Gov"~1841.181000+410,
+                                                Admission_year==2019 & Resettlement_type=="US_Gov"~1878.446000+ 395 ,
+                                                Admission_year==2020 & Resettlement_type=="US_Gov"~1878.446000 + 251,
+                                               # State department is $232,900,000 in RAP
+                                                Admission_year==2021 & Resettlement_type=="US_Gov"~NA,
+                                                .default=NA)) %>%  mutate(Is_US= case_when(Resettlement_type=="US_Gov"~1,
+                                                                                          .default = 0))
+
+CA_by_c<- CA%>% group_by(Admission_year,Reference_period, Is_US)%>% summarize(Total_persons_c=sum(Total_persons, na.rm = T)) 
+CA<- left_join(CA, CA_by_c, by=c("Admission_year", "Reference_period", "Is_US", "Total_persons_c"))
+# I THINK WE CAN GET A BETTER PER CAPITA VARIABLE NEED TO USE TOTALPERSONS?TOTAL_PERS_C AND CHECK THE GROUPING VAR
+CA<- CA%>% group_by(Admission_year, Is_US) %>% mutate(Initial_funds_per = (Year_funding_mil*1000000)/(Total_persons_c))
+```
+# The Regression        
+```{r}
+# First a null model with just the level 2 predictor
+M0<-lmer(Percent_FD~ 1+(1|Resettlement_type), data=CA)
+summary(M0)
+modelsummary(M0)
+modelplot(M0)
+```
+# Next the multilevel model
+```{r}
+CA$Resettlement_type<- relevel(factor(CA$Resettlement_type, ordered =F), ref="CA_Gov")
+M1<-lmer(Percent_FD~ Years_in+relevel(factor(Sex, ordered=F), ref="Males")+Admission_year+log(Initial_funds_per)*Resettlement_type+(1|Resettlement_type), data=CA)
+modelsummary(list(M0,M1))
+```
+
+
+```{r}
+
+
+```
+
+
+```{r}
+nLx<- function(){
+  
+}
+
+
+
+
+## function to define Leslie matrix, based on nLx and nFx values
+leslie <- function(nLx,
+                   nFx, 
+                   n_age_groups=10,
+                   ffab = 0.4886){
+  L = matrix(0, nrow = n_age_groups, ncol = n_age_groups)
+  L[1,] = ffab * nLx[1]*(nFx[1:n_age_groups]+nFx[2:(n_age_groups+1)]*nLx[2:(n_age_groups+1)]/nLx[1:n_age_groups])/2 # top row 
+  diag(L[2:n_age_groups,1:(n_age_groups-1)]) = nLx[2:n_age_groups] / nLx[1:(n_age_groups-1)] # subdiagonal
+  return(L)
+}
+```
