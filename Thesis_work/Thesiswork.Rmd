@@ -1,0 +1,1508 @@
+---
+title: "Thesis Work"
+output: html_notebook
+---
+
+# Let's load in the data and packages
+
+```{r}
+library(janitor)
+library(stargazer)
+library(tidyverse)
+library(mice)
+library(DescTools)
+library(survey)
+library(lmtest)
+library(naniar)
+library(glue)
+library(haven)
+```
+
+```{r}
+
+UNASR16 <- read_dta("P:/Refugee Data/Combined ASR/2016/2016-ASR_Public_Use_File.dta")
+#View(ASR16)
+
+
+UNASR17 <- read_dta("P:/Refugee Data/Combined ASR/2017/2017 ASR_Public_Use_File.dta")
+#View(ASR17)
+
+
+UNASR18 <- read_dta("P:/Refugee Data/Combined ASR/2018/2018 ASR_Public_Use_File.dta")
+#View(ASR18)
+
+
+UNASR19 <- read_dta("P:/Refugee Data/Combined ASR/2019/2019 ASR_Public_Use_File.dta")
+#View(ASR19)
+
+UNASR20 <- read_dta("P:/Refugee Data/Combined ASR/2020/2020 ASR_Public_Use_File_correction_ver2.dta")
+
+ind_data<-list(UNASR16, UNASR17, UNASR18, UNASR19)
+ind_data<- lapply(ind_data, zap_labels)
+ind_df_names<- c("UNASR16", "UNASR17", "UNASR18", "UNASR19")
+
+names(ind_data) <- ind_df_names
+```
+
+I need a function to make better tables
+```{r}
+logit_results<-function(summary_object){
+  output<-cbind.data.frame(summary_object$term, round(exp(summary_object$estimate),2), round(summary_object$p.value, 3))
+  return(output)
+}
+
+```
+
+
+
+
+
+Setting up weighted household level analysis
+
+```{r}
+UNSR16<- UNASR16[UNASR16$respondent==1,]
+UNSR17<- UNASR17[UNASR17$respondent==1,]
+UNSR18<- UNASR18[UNASR18$respondent==1,]
+UNSR19<- UNASR19[UNASR19$respondent==1,]
+UNSR20<- UNASR20[UNASR20$respondent==1,]
+
+# Now a list of the household level data frames
+hh_data<-list(UNSR16, UNSR17, UNSR18, UNSR19 )
+hh_df_names<- c("UNASR16", "UNASR17", "UNASR18", "UNASR19")
+names(hh_data) <- hh_df_names
+hh_data<- lapply(hh_data, zap_labels)
+match("Weight_household_R1", names(UNSR16))
+match("Weight_household_R27", names(UNSR16))
+
+match("Weight_household", names(UNSR16))
+
+# I am making a list of all the columns related to my analysis here
+#hhid,respondent, Weight_household_R1, Weight_household_R2, Weight_household_R3, Weight_household_R4, Weight_household_R5, Weight_household_R6, Weight_household_R7, Weight_household_R8, Weight_household_R9, Weight_household_R10, Weight_household_R11, Weight_household_R12, Weight_household_R13, Weight_household_R14, Weight_household_R15, Weight_household_R16, Weight_household_R17, Weight_household_R18, Weight_household_R19, Weight_household_R20, Weight_household_R21, Weight_household_R22, Weight_household_R23, Weight_household_R24, Weight_household_R25, Weight_household_R26, Weight_household_R27, FI, WHENJOB, WHENARRIVE, RESIDENCY,SEX,AGE,numppl,MARSTAT,DEPENDS, nothh_depends, KIDS,ORIGIN,ECOSECTOR,HOSTREG,SVYYR,HIGHEST_DEGREE, EDUC_YEARS, CONTEXT,PREENG,CURENGEN,CUREMPT,CURENG,URECOSEC, ui_soi_pubassist, TILLJOBb,WEEKHOUR, FOODSTAMPS, TANF, RCA, SSI, GA, Miscash, PubHo, NUM_PROGS
+```
+
+# Cleaning and Making Variables
+
+## Making Time till First job
+
+```{r}
+# I think I can just make the 2020 data just look like the old stuff and then put it all through the same function. We get tripped up on small stuff like
+years=list(2016, 2017, 2018, 2019)
+
+# First the ES cleaning, because 2020 doesn't have first job.We have to separate ind level operations from hh level and ind is first
+dc_2020_f<- function(hh_data, ind_data, years){
+  # gotta uncomment this if yu wannd to timetilljob 
+ # hh_data$WHENJOB<- hh_data$qn18dyear
+#  hh_data$WHENJOB<- ifelse(is.na(hh_data$qn8year), 0, hh_data$qn18dyear)
+  #Making a residency variable-- how long someone has been in US
+  hh_data$RESIDENCY<-years-as.numeric(hh_data$qn8year)
+  #When arrive is the year they arrive
+  hh_data$WHENARRIVE<-as.numeric(hh_data$qn8year)
+  ind_data$WHENARRIVE<-as.numeric(ind_data$qn8year)
+  
+  hh_data$WHENARRIVE<-ifelse(hh_data$qn8year==9999 |hh_data$qn8year==9998, NA, hh_data$qn8year)
+  ind_data$WHENARRIVE<-ifelse(ind_data$qn8year==9999 |ind_data$qn8year==9998, NA, ind_data$qn8year)
+  # Remove for 2020 tilljobb
+  #hh_data$TILLJOBb<- hh_data$WHENJOB-hh_data$WHENARRIVE
+  
+ # hh_data<-hh_data%>%mutate(TILLJOBb= case_when(TILLJOBb<0 & TILLJOBb>-6~0,
+ #                                                    TILLJOBb<=-100~6,
+ #                                                   .default= TILLJOBb))
+  
+  
+  
+  #Making weekly working hours qn37=all jobs weekly working hours last week, qn43=weekly working hours last year, all jobs
+  hh_data$qn6a<- ifelse(hh_data$qn37==98 | hh_data$qn37==99, NA, hh_data$qn37)
+  hh_data$qn6b<- ifelse(hh_data$qn43==98 | hh_data$qn43==99, NA, hh_data$qn43)
+  hh_data$WEEKHOUR<- hh_data$qn6b
+  ## This is a little odd, but makes sure WEEKHOUR is not NA by using 6a if 6b is NA. 
+  hh_data$WEEKHOUR<- ifelse(is.na(hh_data$WEEKHOUR), hh_data$qn6a, hh_data$qn6b)
+  
+  #Age and Kid variables
+  hh_data$AGE<- ifelse(hh_data$qn4a==999|hh_data$qn4a==998, NA, hh_data$qn4a)
+  ind_data$KID<- ifelse(ind_data$qn4a<16, 1, 0)
+  
+  #Education Vars
+  hh_data$qn30<- ifelse(hh_data$qn30==99| hh_data$qn30==98| hh_data$qn30==97 | hh_data$qn30==90, NA, hh_data$qn30)
+  hh_data<- hh_data%>% mutate(HIGHEST_DEGREE= case_when(qn30== 5~4,
+                                                        qn30==4 |qn30 ==3~5,
+                                                        qn30==7~6,
+                                                        qn30==9~4,
+                                                        .default=qn30))
+  ind_data$qn30<- ifelse(ind_data$qn30==99| ind_data$qn30==98| ind_data$qn30==97 | ind_data$qn30==90, NA, ind_data$qn30)
+  ind_data<- ind_data%>% mutate(HIGHEST_DEGREE= case_when(qn30== 5~4,
+                                                        qn30==4 |qn30 ==3~5,
+                                                        qn30==7~6,
+                                                        qn30==9~4,
+                                                        .default=qn30))
+  
+# This is for comparisons with earlier work  
+    hh_data$HIGHEST_DEGREE<- factor(hh_data$HIGHEST_DEGREE,levels=1:7, labels = c("None", "Primary", "Camp Training", "Technical School", "Secondary", "University", "Medical Degree"))
+    
+    
+#This is it's own system.     
+#  hh_data$HIGEST_DEGREE<- factor(hh_data$HIGHEST_DEGREE,levels=1:9, labels = c("None", "Primary", "Middle", "Highschool", "Tech/Vocational", "Some University", "BA", "Advanced Degree", "Religious School"))
+
+  
+  #This gets the number of kids in a household. 
+kids<- ind_data %>%
+  filter(KID==1 )%>% group_by(hhid) %>% summarize(KIDS= sum(KID))
+
+hh_data<- hh_data%>% left_join(kids, by= "hhid")
+ 
+# Now lets do education of non household heads. Probably average years of education works best. We subset based on those who are nolder than 14 because FLSA #sets 14 as minimum age for employment (except in Ag, which is just a limitation.)
+non_resp_educ<- ind_data %>% filter(respondent == 0 & qn4a>13 )%>% group_by(hhid) %>% summarize(NONRESP_MAX_DEGREE= max(HIGHEST_DEGREE))
+
+hh_data<- hh_data%>% left_join(non_resp_educ, by= "hhid")
+
+##2016
+# Buissness Owner, Professional, management, and white collar will be a "Professional"
+hh_data<- hh_data%>% mutate(ECOSECTOR= case_when(qn16>96~NA,
+                                                 .default = qn16))
+hh_data$ECOSECTOR<- factor(hh_data$ECOSECTOR, levels = c(1:4), labels = c("None", "working", "self-employed", "Other"))
+
+hh_data$ECOSECTOR<-relevel(hh_data$ECOSECTOR, ref ="None")
+
+#2020 has the job that they did right before they came to the US too. 
+
+hh_data<- hh_data %>% mutate(before_US_job= case_when(qn19==98 | qn19== 99~NA, 
+                                                      .default=qn19))
+
+hh_data$before_US_job<- factor(hh_data$before_US_job, levels = c(1:4), labels = c("None", "working", "self-employed", "Other"))
+
+hh_data$before_US_job<-relevel(hh_data$before_US_job, ref ="None")
+
+# The current sector of employment doesn't exist in 2020. Instead we have ui_work
+
+hh_data<- hh_data %>% mutate(US_work= case_when(ui_work==999~NA, 
+                                                      .default=qn19))
+
+hh_data$US_work<- factor(hh_data$US_work, levels = c(1:4), labels = c("None", "working", "self-employed", "Other"))
+
+hh_data$US_work<-relevel(hh_data$US_work, ref ="None")
+
+
+
+hh_data<- hh_data%>% mutate(ORIGIN =case_when(qn6==1|qn6==5|qn6==14|qn6==15|qn6==26~97, 
+                                            qn6==96|qn6==98|qn6==99~NA, 
+                                            .default = qn6))
+hh_data$ORIGIN<- factor(hh_data$ORIGIN, levels = c(2,3,7,8,11,17,19,21,23,27,97), labels = c("Bhutan", "Burma", "DR Congo", "Eritrea", "Iraq",  "Somalia", "Syria", "Thailand", "Ukraine", "El Salvador", "Other"))
+## This labels all of the countries of origin, which might not be very useful. It clogs up the regression output. 
+##hh_data$ORIGIN<- factor(hh_data$ORIGIN, levels = c(1,3:5,7,8,11,14:17,19,21,23,26,27,9797), labels = c("US","Bhutan", "Burma", "Burundi", "DR Congo", "Eritrea", "Iraq", "Malaysia", "Nepal", "Rwanada",  "Somalia", "Syria", "Thailand", "Ukraine", "Colombia", "El Salvador", "Other"))
+hh_data$ORIGIN<-relevel(hh_data$ORIGIN,ref = "Iraq")
+
+# Pre migration English proficiency
+hh_data$qnqn23<- ifelse(hh_data$qn23== 8|hh_data$qn23==9, NA, hh_data$qn23)
+hh_data$PREENG<- abs(hh_data$qn23-5)
+#Region of resettlement
+hh_data$HOSTREG<-ifelse(hh_data$qn9==98| hh_data$qn9==99, NA, hh_data$qn9)
+
+hh_data$HOSTREG<- factor(hh_data$HOSTREG,levels = c(1,2,3,4),labels = c("NorthEast", "South", "MidWest", "West"))
+hh_data$HOSTREG<-relevel(hh_data$HOSTREG, ref = 4)
+#Current enrollment in a English  program
+hh_data$CURENGEN<- ifelse(hh_data$qn25>3, NA, ifelse(hh_data$qn25==2, 0, hh_data$qn25))
+#Factorize
+hh_data$CURENGEN<- factor(hh_data$CURENGEN, levels = c(0,1), labels = c("No", "Yes"))
+
+#Current enrollment in a job training program
+hh_data$CUREMPT<- ifelse(hh_data$qn28==8|hh_data$qn28==9, NA, hh_data$qn28)
+#Factorize
+hh_data$CUREMPT<- factor(hh_data$CUREMPT, levels = c(1,2), labels = c("Yes", "No"))
+
+#English proficiency now
+hh_data$qn24<- ifelse(hh_data$qn24==8|hh_data$qn24==9, NA, hh_data$qn24)
+hh_data$CURENG<- abs(hh_data$qn24-5)
+
+#Factorizing
+hh_data$CURENG<- factor(hh_data$CURENG,levels = c(1,2,3,4), labels = c("Not at All", "Not Well", "Well", "Very Well"), ordered = F)
+# Sex
+hh_data$SEX<- ifelse(hh_data$qn3>89, NA, hh_data$qn3)
+
+ind_data$SEX<- ifelse(ind_data$qn3>89, NA, ind_data$qn3)
+
+# Factorize
+ind_data$SEX<- factor(ind_data$SEX, levels = c(1,2),labels = c("Male", "Female"))
+# Factorize
+hh_data$SEX<- factor(hh_data$SEX, levels = c(1,2),labels = c("Male", "Female"))
+
+# Marital Status
+
+hh_data<- hh_data%>% mutate(MARSTAT= case_when(qn5==2~1,
+                                               qn5==5~3,
+                                               qn5==96| qn5>97~NA,
+                                               .default=qn5))
+
+
+# FActorizing
+
+hh_data$MARSTAT<- factor(hh_data$MARSTAT, levels = c(1,2,3,4,5), labels = c("Married", "Divorced/Seperated/Widowed", "Never Married", "Other", "R is a child"))
+
+# The dependets variable
+ind_data$DEPENDS<- ifelse(ind_data$qn20==4,1,0)
+
+nothh_depends<- ind_data %>%
+  filter(respondent==0 )%>% group_by(hhid) %>% summarize(nothh_depends= sum(DEPENDS))
+
+hh_data<- hh_data%>% left_join(nothh_depends, by= "hhid")
+
+#Now need to do household is dependent
+hh_data$hh_DEPENDS<- ifelse(hh_data$qn20==4,1,0)
+
+hh_data$SVYYR<- years
+
+#Dependence on pub assist programs. 
+
+## Food Stamps
+hh_data<-hh_data%>% mutate(Foodstamps= case_when(qn60==2~0,
+                                                 qn60>2~NA,
+                                                 .default=qn60))
+hh_data$Foodstamps<-factor(hh_data$Foodstamps,levels = c(0,1), labels = c(" Not On Foodstamps", "On foodstamps"))
+
+#Tanf
+hh_data<-hh_data%>% mutate(TANF= case_when(qn61==2~0,
+                                                 qn61>2~NA,
+                                                 .default=qn61))
+
+#Factorizing
+hh_data$TANF<-factor(hh_data$TANF,levels = c(0,1), labels = c(" Not On TANF", "On TANF"))
+
+# SSI
+hh_data<-hh_data%>% mutate(SSI= case_when(qn62==2~0,
+                                                 qn62>2~NA,
+                                                 .default=qn62))
+
+#Factorizing
+hh_data$SSI<-factor(hh_data$SSI,levels = c(0,1), labels = c(" Not On SSI", "On SSI"))
+
+#General Assistance
+
+hh_data<-hh_data%>% mutate(GA= case_when(qn63==2~0,
+                                                 qn63>2~NA,
+                                                 .default=qn63))
+
+#Factorizing
+hh_data$GA<-factor(hh_data$GA,levels = c(0,1), labels = c(" Not On GA", "On GA"))
+
+#Other assistance Includes things like public housing or help with bills
+hh_data<-hh_data%>% mutate(Miscash= case_when(qn64==2~0,
+                                                 qn64>2~NA,
+                                                 .default=qn64))
+
+#Factorizing
+hh_data$Miscash<-factor(hh_data$Miscash,levels = c(0,1), labels = c(" Not On Miscash", "On Miscash"))
+
+
+
+
+
+
+
+
+
+
+
+# DEPENDENCE FOR IND_DATA
+#Dependence on pub assist programs. 
+
+## Food Stamps
+ind_data<-ind_data%>% mutate(Foodstamps= case_when(qn60==2~0,
+                                                 qn60>2~NA,
+                                                 .default=qn60))
+ind_data$Foodstamps<-factor(ind_data$Foodstamps,levels = c(0,1), labels = c(" Not On Foodstamps", "On foodstamps"))
+
+#Tanf
+ind_data<-ind_data%>% mutate(TANF= case_when(qn61==2~0,
+                                                 qn61>2~NA,
+                                                 .default=qn61))
+
+#Factorizing
+ind_data$TANF<-factor(ind_data$TANF,levels = c(0,1), labels = c(" Not On TANF", "On TANF"))
+
+# SSI
+ind_data<-ind_data%>% mutate(SSI= case_when(qn62==2~0,
+                                                 qn62>2~NA,
+                                                 .default=qn62))
+
+#Factorizing
+ind_data$SSI<-factor(ind_data$SSI,levels = c(0,1), labels = c(" Not On SSI", "On SSI"))
+
+#General Assistance
+
+ind_data<-ind_data%>% mutate(GA= case_when(qn63==2~0,
+                                                 qn63>2~NA,
+                                                 .default=qn63))
+
+#Factorizing
+ind_data$GA<-factor(ind_data$GA,levels = c(0,1), labels = c(" Not On GA", "On GA"))
+
+#Other assistance Includes things like public housing or help with bills
+ind_data<-ind_data%>% mutate(Miscash= case_when(qn64==2~0,
+                                                 qn64>2~NA,
+                                                 .default=qn64))
+
+#Factorizing
+ind_data$Miscash<-factor(ind_data$Miscash,levels = c(0,1), labels = c(" Not On Miscash", "On Miscash"))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+hh_data$NUM_PROGS <- as.numeric(hh_data$Foodstamps)+as.numeric(hh_data$TANF)+as.numeric(hh_data$SSI)+as.numeric(hh_data$GA)+as.numeric(hh_data$Miscash)-5
+ind_data$NUM_PROGS<-as.numeric(ind_data$Foodstamps)+as.numeric(ind_data$TANF)+as.numeric(ind_data$SSI)+as.numeric(ind_data$GA)+as.numeric(ind_data$Miscash)-5
+# A Dichotomous Financial Independence
+hh_data<-hh_data %>% mutate(FD=case_when(NUM_PROGS==0~0,
+                               NUM_PROGS>0~1))
+
+ind_data<-ind_data %>% mutate(FD=case_when(NUM_PROGS==0~0,
+                               NUM_PROGS>0~1))
+
+  hh_data<- hh_data%>% mutate(ui_soi_pubassist= case_when(qn57>800 & NUM_PROGS!=0~2,
+                                                          qn57<800 & NUM_PROGS==0~1,
+                                                          qn57>800 & NUM_PROGS!=0~3,
+                                                          qn57<800 & NUM_PROGS==0~4,
+                                                          NUM_PROGS!=0 & is.na(qn57)~5,
+                                                          qn57>800 & is.na(NUM_PROGS)~6,
+                                                          NUM_PROGS==0 & is.na(qn57)~7,
+                                                          is.na(NUM_PROGS) & is.na(qn57)~999))
+  
+  ind_data<- ind_data%>% mutate(ui_soi_pubassist= case_when(qn57>800 & NUM_PROGS!=0~2,
+                                                          qn57<800 & NUM_PROGS==0~1,
+                                                          qn57>800 & NUM_PROGS!=0~3,
+                                                          qn57<800 & NUM_PROGS==0~4,
+                                                          NUM_PROGS!=0 & is.na(qn57)~5,
+                                                          qn57>800 & is.na(NUM_PROGS)~6,
+                                                          NUM_PROGS==0 & is.na(qn57)~7,
+                                                          is.na(NUM_PROGS) & is.na(qn57)~999))
+                              
+                                                
+  hh_data$FI<- ifelse(hh_data$ui_soi_pubassist==999, NA, ifelse(hh_data$ui_soi_pubassist==1, 0,1))
+  ind_data$FI<- ifelse(ind_data$ui_soi_pubassist==999, NA, ifelse(ind_data$ui_soi_pubassist==1, 0,1))
+#Don't forget to add TILLJOBb & WHENJOB back in 
+  
+hh_data$in_df<-1
+ind_data$in_df<-1
+# Now to filter the dataset. 
+hh_df<- hh_data %>% select(hhid,respondent,in_df,  Weight_household,Weight_household_pop,Weight_person_pop, FI, FD, WHENARRIVE, RESIDENCY,SEX,AGE,numppl,MARSTAT,hh_DEPENDS, nothh_depends, KIDS,ORIGIN,ECOSECTOR,HOSTREG,SVYYR,HIGHEST_DEGREE, NONRESP_MAX_DEGREE,PREENG,CURENGEN,CUREMPT,CURENG, ui_soi_pubassist,WEEKHOUR, Foodstamps, TANF, SSI, GA, Miscash, NUM_PROGS)
+
+ind_df<- ind_data %>% select(hhid,respondent,in_df,WHENARRIVE, Weight_household,Weight_person_pop, Weight_household_pop, numppl, SEX, FI, FD) %>% dplyr::filter( !is.na(Weight_person_pop))
+
+
+#Let's do the imputations
+
+#Probably want to name them before we return the data
+
+
+
+
+return(list(hh_df, ind_df))}
+
+data_2020<-dc_2020_f(UNSR20, UNASR20, years=2020)
+names(data_2020)<- c("UNSR2020", "UNASR2020")
+```
+
+
+```{r}
+# First the ES cleaning, because 2020 doesn't have first job.We have to separate ind level operations from hh level and ind is first
+first_job_f<- function(hh_data, ind_data, years){
+
+  hh_data$WHENJOB<- hh_data$qn18dyear
+  hh_data$WHENJOB<- ifelse(is.na(hh_data$qn18dyear), 0, hh_data$qn18dyear)
+  
+  # we should make a individual level when job
+  
+  ind_data$WHENJOB<- ind_data$qn18dyear
+  ind_data$WHENJOB<- ifelse(is.na(ind_data$qn18dyear), 0, ind_data$qn18dyear)
+  
+  
+  #Making a residency variable-- how long someone has been in US
+  hh_data$RESIDENCY<-years-as.numeric(hh_data$qn1jyear)
+  #When arrive is the year they arrive
+  hh_data$WHENARRIVE<-as.numeric(hh_data$qn1jyear)
+  ind_data$WHENARRIVE<-as.numeric(ind_data$qn1jyear)
+  
+  ind_data$TILLJOBb<- ind_data$WHENJOB-ind_data$WHENARRIVE
+  
+  ind_data<-ind_data%>%mutate(TILLJOBb= case_when(TILLJOBb<0 & TILLJOBb>-6~0,
+                                                    TILLJOBb<=-100~6,
+                                                   .default= TILLJOBb))
+  min_first_job<- ind_data %>% group_by(hhid) %>% summarize(min_first_job = min(TILLJOBb))
+  hh_data<- hh_data%>% left_join(min_first_job, by= "hhid")
+  
+  hh_data$TILLJOBb<- hh_data$min_first_job
+                                                
+  hh_data$FI<- ifelse(hh_data$ui_soi_pubassist==999, NA, ifelse(hh_data$ui_soi_pubassist==1, 0,1))
+  ind_data$FI<- ifelse(ind_data$ui_soi_pubassist==999, NA, ifelse(ind_data$ui_soi_pubassist==1, 0,1))
+  #Making weekly working hours 6a=primary job, 6b=all jobs
+  hh_data$qn6a<- ifelse(hh_data$qn6a==98 | hh_data$qn6a==99, NA, hh_data$qn6a)
+  hh_data$qn6b<- ifelse(hh_data$qn6b==98 | hh_data$qn6b==99, NA, hh_data$qn6b)
+  hh_data$WEEKHOUR<- hh_data$qn6b
+  ## This is a little odd, but makes sure WEEKHOUR is not NA by using 6a if 6b is NA. 
+  hh_data$WEEKHOUR<- ifelse(is.na(hh_data$WEEKHOUR), hh_data$qn6a, hh_data$qn6b)
+  
+  #Age and Kid variables
+  hh_data$AGE<- ifelse(hh_data$qn1d==999|hh_data$qn1d==998, NA, hh_data$qn1d)
+  ind_data$KID<- ifelse(ind_data$qn1d<16, 1, 0)
+  
+  #Education Vars
+  hh_data$qn2b<- ifelse(hh_data$qn2b==99| hh_data$qn2b==98| hh_data$qn2a==97, NA, hh_data$qn2b)
+  hh_data$HIGHEST_DEGREE<- hh_data$qn2b
+  hh_data$HIGEST_DEGREE<- factor(hh_data$HIGHEST_DEGREE,levels=1:7, labels = c("None", "Primary", "Camp Training", "Technical School Cert", "Secondary", "University", "Medical Degree"))
+  hh_data$EDUC_YEARS<- ifelse(hh_data$qn2a==99| hh_data$qn2a==98, NA, hh_data$qn2a)
+  ind_data$EDUC_YEARS<- ifelse(ind_data$qn2a==99| ind_data$qn2a==98, NA, ind_data$qn2a)
+  
+  #This gets the number of kids in a household. 
+kids<- ind_data %>%
+  filter(KID==1 )%>% group_by(hhid) %>% summarize(KIDS= sum(KID))
+
+hh_data<- hh_data%>% left_join(kids, by= "hhid")
+ 
+ # Now lets do education of non household heads. Probably average years of education works best. We subset based on those who are nolder than 14 because FLSA sets 14 as minimum age for employment (except in Ag, which is just a limitation.)
+non_resp_educ<- ind_data %>%
+  filter(respondent == 0 & qn1d>13 )%>% group_by(hhid) %>% summarize(NONRESP_EDUC_YEARS= mean(EDUC_YEARS))
+
+hh_data<- hh_data%>% left_join(non_resp_educ, by= "hhid")
+
+#this is previous sector of employment
+hh_data$qn3b<- ifelse(hh_data$qn3b==98|hh_data$qn3b== 99, NA, hh_data$qn3b)
+
+##2016
+# Buissness Owner, Professional, management, and white collar will be a "Professional"
+hh_data$ECOSECTOR<- ifelse(hh_data$qn3b == 1| hh_data$qn3b == 2|hh_data$qn3b ==3|hh_data$qn3b ==4|hh_data$qn3b ==5, 1, 
+      #Sales will be Sales                    
+                  ifelse(hh_data$qn3b ==6, 2, 
+                          #Hospitality, service workers, and laborers will be "Service"       
+                                 ifelse(hh_data$qn3b ==9|hh_data$qn3b ==10|hh_data$qn3b ==11, 3, 
+                                        #Skilled Trades will be "Blue Collar"
+                                        ifelse(hh_data$qn3b ==7|hh_data$qn3b ==8|hh_data$qn3b ==12, 4, 
+                 #None is none
+                 ifelse(hh_data$qn3b ==96, 0, 
+                        #Students are students
+                        ifelse(hh_data$qn3b ==13, 5, 
+                 #Other is other
+                 ifelse(hh_data$qn3b== 97, 6, hh_data$qn3b)))))))
+hh_data$ECOSECTOR<- factor(hh_data$ECOSECTOR, levels = c(0:6), labels = c("None","Professional", "Sales", "Service", "Blue Collar", "Student", "Other"))
+
+hh_data$ECOSECTOR<-relevel(hh_data$ECOSECTOR, ref ="None")
+
+# The current sector of employment
+hh_data$URECOSEC<-ifelse(hh_data$qn19b==99|hh_data$qn19b==98,NA,
+                        #Blue Collar
+                        ifelse(hh_data$qn19b==1|hh_data$qn19b==8|hh_data$qn19b==10, 1, 
+                               
+                  #Retail/Service
+                  
+                   ifelse(hh_data$qn19b==2|hh_data$qn19b==5|hh_data$qn19b==7|hh_data$qn19b==11, 2, 
+                             ifelse(hh_data$qn19b==4|hh_data$qn19b==3, 3, 
+                                    
+                                    #General logistics
+                                    
+                                  ifelse(hh_data$qn19b==9|hh_data$qn19b==6|hh_data$qn19b==12, 4, 
+                                           ifelse(hh_data$qn19b==97, 5 ,
+                                                  ifelse(hh_data$qn19b==96, 0,hh_data$qn19b)))))))
+#Factorize Current Sector of employment
+hh_data$URECOSEC<- factor(hh_data$URECOSEC, labels= c("None", "BlueCollar", "Retail/Sales", "Professional/ED/Health/SocialServices", "General Logistical Support", "Other"), levels = c(0:5), ordered = F)
+#Country of Origin
+hh_data<- hh_data%>% mutate(ORIGIN =case_when(qn1g==1|qn1g==4|qn1g==7|qn1g==11|qn1g==12|qn1g==13|qn1g==15|qn1g==19|qn1g==21| qn1g==24| qn1g==25~97, 
+                                            qn1g==96|qn1g==98|qn1g==99~NA, 
+                                            .default = qn1g))
+hh_data$ORIGIN<- factor(hh_data$ORIGIN, levels = c(2:3,5:6,9:10, 16, 18,20, 22,26, 97), labels = c("Bhutan", "Burma", "Cuba", "DR Congo", "Iran", "Iraq",  "Somalia", "Syria", "Thailand", "Ukraine", "El Salvador", "Other"))
+## This labels all of the countries of origin, which might not be very useful. It clogs up the regression output. 
+#hh_data$ORIGIN<- factor(hh_data$ORIGIN,levels = c(1:22,24:26, 97), labels = c("Afghanistan", "Bhutan", "Burma","Burundi", "Cuba", "DR Congo", "Eritrea", "Ethiopia", "Iran", "Iraq", "Jordan", "Kenya", "Malaysia", "Nepal", "Rwanada", "Somalia", "Sudan", "Syria", "Tanzania", "Thailand", "Uganda",  "Ukraine", "U.S.", "Colombia", "El Salvador", "Other"))
+hh_data$ORIGIN<-relevel(hh_data$ORIGIN,ref = "Cuba")
+
+# The contextual attainment
+### Making country specific variance estimates. All estimates use the UN Development Program Human Development report for 2015 or the most recently available data (for Somalia): https://hdr.undp.org/en/indicators/103006. These are just raw deviations from the mean. 
+#Bhutan Mean for 2015 Mean =3.4 
+hh_data$CONTEXT<- ifelse(hh_data$ORIGIN== "Afghanistan", hh_data$EDUC_YEARS-2.37, 
+                        ifelse(hh_data$ORIGIN== "Bhutan", hh_data$EDUC_YEARS-3.4, 
+                        ifelse(hh_data$ORIGIN=="Burma", hh_data$EDUC_YEARS-4.9, ifelse(hh_data$ORIGIN=="Burundi", hh_data$EDUC_YEARS-2.29,
+                              ifelse(hh_data$ORIGIN=="Cuba", hh_data$EDUC_YEARS-11.4,
+                                      ifelse(hh_data$ORIGIN=="DR Congo", hh_data$EDUC_YEARS-6.4,
+                                             ifelse(hh_data$ORIGIN=="Eritrea", hh_data$EDUC_YEARS-3.9,
+                                                    ifelse(hh_data$ORIGIN=="Ethiopia", hh_data$EDUC_YEARS-2.58,
+                                                    ifelse(hh_data$ORIGIN=="Iran", hh_data$EDUC_YEARS-9.9, 
+                                                           ifelse(hh_data$ORIGIN=="Iraq", hh_data$EDUC_YEARS-6.8, ifelse(hh_data$ORIGIN=="Jordan", hh_data$EDUC_YEARS-10.07,ifelse(hh_data$ORIGIN=="Kenya", hh_data$EDUC_YEARS-6.3, ifelse(hh_data$ORIGIN=="Malaysia", hh_data$EDUC_YEARS-10.23, ifelse(hh_data$ORIGIN=="Nepal", hh_data$EDUC_YEARS-4.5, ifelse(hh_data$ORIGIN=="Rwanada", hh_data$EDUC_YEARS-4.13,
+                                                                  ifelse(hh_data$ORIGIN=="Somalia", hh_data$EDUC_YEARS-2.1, ifelse(hh_data$ORIGIN=="Sudan", hh_data$EDUC_YEARS-3.62,
+                                                                         ifelse(hh_data$ORIGIN=="Syria", hh_data$EDUC_YEARS-5.1, ifelse(hh_data$ORIGIN=="Tanzania", hh_data$EDUC_YEARS-5.83, ifelse(hh_data$ORIGIN=="Thailand", hh_data$EDUC_YEARS-8.18, ifelse(hh_data$ORIGIN=="Uganda", hh_data$EDUC_YEARS-5.51,
+                                                                              ifelse(hh_data$ORIGIN=="Ukraine", hh_data$EDUC_YEARS-11.4, 
+                                                                                       ifelse(hh_data$ORIGIN=="U.S.", hh_data$EDUC_YEARS-13.3,ifelse(hh_data$ORIGIN=="Colombia", hh_data$EDUC_YEARS-8.05, ifelse(hh_data$ORIGIN=="El Salvador", hh_data$EDUC_YEARS-6.62, NA)))))))))))))))))))))))))
+
+# Pre migration English proficiency
+hh_data$qn4a<- ifelse(hh_data$qn4a== 8|hh_data$qn4a==9, NA, hh_data$qn4a)
+hh_data$PREENG<- abs(hh_data$qn4a-5)
+#Region of resettlement
+hh_data$HOSTREG<-ifelse(hh_data$qn1k==98| hh_data$qn1k==99, NA, hh_data$qn1k)
+
+hh_data$HOSTREG<- factor(hh_data$HOSTREG,levels = c(1,2,3,4),labels = c("NorthEast", "South", "MidWest", "West"))
+hh_data$HOSTREG<-relevel(hh_data$HOSTREG, ref = 4)
+#Current enrollment in a English  program
+hh_data$CURENGEN<- ifelse(hh_data$qn4e==8|hh_data$qn4e==9, NA, ifelse(hh_data$qn4e==6, 2, hh_data$qn4e))
+#Factorize
+hh_data$CURENGEN<- factor(hh_data$CURENGEN, levels = c(1,2), labels = c("No", "Yes"))
+
+#Current enrollement in a job training program
+hh_data$CUREMPT<- ifelse(hh_data$qn24a==8|hh_data$qn24a==9, NA, hh_data$qn24a)
+#Factorize
+hh_data$CUREMPT<- factor(hh_data$CUREMPT, levels = c(1,2), labels = c("No", "Yes"))
+
+#English proficiency now
+hh_data$qn4b<- ifelse(hh_data$qn4b==8|hh_data$qn4b==9, NA, hh_data$qn4b)
+hh_data$CURENG<- abs(hh_data$qn4b-5)
+
+#Factorizing
+hh_data$CURENG<- factor(hh_data$CURENG,levels = c(1,2,3,4), labels = c("Not at All", "Not Well", "Well", "Very Well"), ordered = F)
+# Sex
+hh_data$SEX<- ifelse(hh_data$qn1f==8|hh_data$qn1f==9, NA, hh_data$qn1f)
+
+ind_data$SEX<- ifelse(ind_data$qn1f==8|ind_data$qn1f==9, NA, ind_data$qn1f)
+
+# Factorize
+ind_data$SEX<- factor(ind_data$SEX, levels = c(1,2),labels = c("Male", "Female"))
+
+# Factorize
+hh_data$SEX<- factor(hh_data$SEX, levels = c(1,2),labels = c("Male", "Female"))
+
+# Marital Status
+
+hh_data$MARSTAT<-ifelse(hh_data$qn1c== 8|hh_data$qn1c== 9, NA, 
+                       ifelse(hh_data$qn1c== 2|hh_data$qn1c== 3|hh_data$qn1c== 5, 2, 
+                              ifelse(hh_data$qn1c== 4, 3,
+                                     ifelse(hh_data$qn1c== 7, 4,
+                                            ifelse(hh_data$qn1c== 6, 5, hh_data$qn1c)))))
+
+
+# FActorizing
+
+hh_data$MARSTAT<- factor(hh_data$MARSTAT, levels = c(1,2,3,4,5), labels = c("Married", "Divorced/Seperated/Widowed", "Never Married", "Other", "R is a child"))
+
+# The dependets variable
+ind_data$DEPENDS<- ifelse(ind_data$qn28a== 8|ind_data$qn28a== 9, NA, 
+                       ifelse(ind_data$qn28a== 1, 0, 
+                              ifelse(ind_data$qn28a== 2, 1, ind_data$qn28a)))
+
+nothh_depends<- ind_data %>%
+  filter(respondent==0 )%>% group_by(hhid) %>% summarize(nothh_depends= sum(DEPENDS))
+
+hh_data<- hh_data%>% left_join(nothh_depends, by= "hhid")
+
+#Now need to do household is dependent
+hh_data$hh_DEPENDS<- ifelse(hh_data$qn28a== 8|hh_data$qn28a== 9, NA, 
+                       ifelse(hh_data$qn28a== 1, 0, 
+                              ifelse(hh_data$qn28a== 2, 1, hh_data$qn28a)))
+
+hh_data$SVYYR<- years
+
+#Dependence on pub assist programs. 
+
+## Food Stamps
+hh_data<-hh_data%>% mutate(Foodstamps= case_when(qn30a==1~0,
+                                               qn30a==2~1,
+                                               qn30a==8~as.numeric(NA),
+                                               qn30a==9~as.numeric(NA)))
+hh_data$Foodstamps<-factor(hh_data$Foodstamps,levels = c(0,1), labels = c(" Not On Foodstamps", "On foodstamps"))
+
+#Tanf
+hh_data<-hh_data%>% mutate(TANF= case_when(qn31a==1~0,
+                                               qn31a==2~1,
+                                               qn31a==8~as.numeric(NA),
+                                               qn31a==9~as.numeric(NA)))
+
+#Factorizing
+hh_data$TANF<-factor(hh_data$TANF,levels = c(0,1), labels = c(" Not On TANF", "On TANF"))
+# Refugee Cash Assistance
+hh_data<-hh_data%>% mutate(RCA= case_when(qn32a==1~0,
+                                               qn32a==2~1,
+                                               qn32a==8~as.numeric(NA),
+                                               qn32a==9~as.numeric(NA)))
+
+#Factorizing
+hh_data$RCA<-factor(hh_data$RCA,levels = c(0,1), labels = c(" Not On RCA", "On RCA"))
+
+# SSI
+hh_data<-hh_data%>% mutate(SSI= case_when(qn32a==1~0,
+                                               qn33a==2~1,
+                                               qn33a==8~as.numeric(NA),
+                                               qn33a==9~as.numeric(NA)))
+
+
+#Factorizing
+hh_data$SSI<-factor(hh_data$SSI,levels = c(0,1), labels = c(" Not On SSI", "On SSI"))
+
+#General Assistance
+
+hh_data<-hh_data%>% mutate(GA= case_when(qn34a==1~0,
+                                               qn34a==2~1,
+                                               qn34a==8~as.numeric(NA),
+                                               qn34a==9~as.numeric(NA)))
+
+#Factorizing
+hh_data$GA<-factor(hh_data$GA,levels = c(0,1), labels = c(" Not On GA", "On GA"))
+
+#Other assistance
+hh_data<-hh_data%>% mutate(Miscash= case_when(qn35a==1~0,
+                                               qn35a==2~1,
+                                               qn35a==8~as.numeric(NA),
+                                               qn35a==9~as.numeric(NA)))
+
+#Factorizing
+hh_data$Miscash<-factor(hh_data$Miscash,levels = c(0,1), labels = c(" Not On Miscash", "On Miscash"))
+#Public Housing
+hh_data<-hh_data%>% mutate(PubHo= case_when(qn38c==1~0,
+                                               qn38c==2~1,
+                                               qn38c==8~as.numeric(NA),
+                                               qn38c==9~as.numeric(NA)))
+
+#Factorizing
+hh_data$PubHo<-factor(hh_data$PubHo,levels = c(0,1), labels = c(" Not On PubHo", "On PubHo"))
+# Number of Programs
+
+hh_data$NUM_PROGS <- as.numeric(hh_data$Foodstamps)+as.numeric(hh_data$TANF)+as.numeric(hh_data$RCA)+as.numeric(hh_data$SSI)+as.numeric(hh_data$GA)+as.numeric(hh_data$Miscash)+as.numeric(hh_data$PubHo)-7
+# A Dichotomous Financial Independence
+hh_data<-hh_data %>% mutate(FD=case_when(NUM_PROGS==0~0,
+                               NUM_PROGS>0~1))
+
+
+
+## FD FOR THE IND_DATA
+
+## Food Stamps
+ind_data<-ind_data%>% mutate(Foodstamps= case_when(qn30a==1~0,
+                                               qn30a==2~1,
+                                               qn30a==8~as.numeric(NA),
+                                               qn30a==9~as.numeric(NA)))
+ind_data$Foodstamps<-factor(ind_data$Foodstamps,levels = c(0,1), labels = c(" Not On Foodstamps", "On foodstamps"))
+
+#Tanf
+ind_data<-ind_data%>% mutate(TANF= case_when(qn31a==1~0,
+                                               qn31a==2~1,
+                                               qn31a==8~as.numeric(NA),
+                                               qn31a==9~as.numeric(NA)))
+
+#Factorizing
+ind_data$TANF<-factor(ind_data$TANF,levels = c(0,1), labels = c(" Not On TANF", "On TANF"))
+# Refugee Cash Assistance
+ind_data<-ind_data%>% mutate(RCA= case_when(qn32a==1~0,
+                                               qn32a==2~1,
+                                               qn32a==8~as.numeric(NA),
+                                               qn32a==9~as.numeric(NA)))
+
+#Factorizing
+ind_data$RCA<-factor(ind_data$RCA,levels = c(0,1), labels = c(" Not On RCA", "On RCA"))
+
+# SSI
+ind_data<-ind_data%>% mutate(SSI= case_when(qn32a==1~0,
+                                               qn33a==2~1,
+                                               qn33a==8~as.numeric(NA),
+                                               qn33a==9~as.numeric(NA)))
+
+
+#Factorizing
+ind_data$SSI<-factor(ind_data$SSI,levels = c(0,1), labels = c(" Not On SSI", "On SSI"))
+
+#General Assistance
+
+ind_data<-ind_data%>% mutate(GA= case_when(qn34a==1~0,
+                                               qn34a==2~1,
+                                               qn34a==8~as.numeric(NA),
+                                               qn34a==9~as.numeric(NA)))
+
+#Factorizing
+ind_data$GA<-factor(ind_data$GA,levels = c(0,1), labels = c(" Not On GA", "On GA"))
+
+#Other assistance
+ind_data<-ind_data%>% mutate(Miscash= case_when(qn35a==1~0,
+                                               qn35a==2~1,
+                                               qn35a==8~as.numeric(NA),
+                                               qn35a==9~as.numeric(NA)))
+
+#Factorizing
+ind_data$Miscash<-factor(ind_data$Miscash,levels = c(0,1), labels = c(" Not On Miscash", "On Miscash"))
+#Public Housing
+ind_data<-ind_data%>% mutate(PubHo= case_when(qn38c==1~0,
+                                               qn38c==2~1,
+                                               qn38c==8~as.numeric(NA),
+                                               qn38c==9~as.numeric(NA)))
+
+#Factorizing
+ind_data$PubHo<-factor(ind_data$PubHo,levels = c(0,1), labels = c(" Not On PubHo", "On PubHo"))
+# Number of Programs
+
+ind_data$NUM_PROGS <- as.numeric(ind_data$Foodstamps)+as.numeric(ind_data$TANF)+as.numeric(ind_data$RCA)+as.numeric(ind_data$SSI)+as.numeric(ind_data$GA)+as.numeric(ind_data$Miscash)+as.numeric(ind_data$PubHo)-7
+# A Dichotomous Financial Independence
+ind_data<-ind_data %>% mutate(FD=case_when(NUM_PROGS==0~0,
+                               NUM_PROGS>0~1))
+
+
+hh_data$in_df<-1
+ind_data$in_df<-1
+
+
+# Now to filter the dataset. 
+hh_df<- hh_data %>% select(hhid,respondent,in_df, Weight_household,Weight_household_pop,Weight_person_pop, FI, FD, WHENARRIVE, WHENJOB, RESIDENCY,SEX,AGE,numppl,MARSTAT,hh_DEPENDS, nothh_depends, KIDS,ORIGIN,ECOSECTOR,HOSTREG,SVYYR,HIGHEST_DEGREE, EDUC_YEARS, NONRESP_EDUC_YEARS, CONTEXT,PREENG,CURENGEN,CUREMPT,CURENG,URECOSEC, ui_soi_pubassist,WEEKHOUR, Foodstamps, TANF, RCA, SSI, GA, Miscash, PubHo, TILLJOBb, NUM_PROGS)
+
+
+ind_df<- ind_data %>% select(hhid,respondent,in_df, Weight_household,Weight_person_pop,Weight_household_pop, FI, FD, SEX,numppl, WHENARRIVE, WHENJOB) %>% dplyr::filter( !is.na(Weight_person_pop))
+
+#Let's do the imputations
+
+#Probably want to name them before we return the data
+
+
+
+
+return(list(hh_df, ind_df))
+}
+m_l<-Map(function(hh_data, ind_data, years) first_job_f(hh_data, ind_data, years), hh_data, ind_data, years)
+
+master_list<- c(m_l, c(data_2020))
+
+```
+
+
+```{r}
+f_d_16 <- function(data = UNSR16, i_data) {
+  cohorts16 <- list()
+  icohorts16<-list()
+  cohorts16$cohort <- split(data, data$WHENARRIVE)
+  icohorts16$cohort <- split(i_data, i_data$WHENARRIVE)
+  cohorts16$by_sex <- list()
+  cohorts16$means_by_sex <- list()
+  cohorts16$cohort_means <- list()
+  
+  # Naming the by_sex list
+  for (i in seq_along(cohorts16$cohort)) {
+    each <- cohorts16$cohort[[i]]
+    cohorts16$by_sex[[i]] <- split(each, each$SEX)
+    names(cohorts16$by_sex)[i] <- unique(each$WHENARRIVE)
+  }
+  
+  for (i in seq_along(icohorts16$cohort)) {
+    each <- icohorts16$cohort[[i]]
+    icohorts16$by_sex[[i]] <- split(each, each$SEX)
+    names(icohorts16$by_sex)[i] <- unique(each$WHENARRIVE)
+  }
+  
+  # Calculating means by sex
+  for (WHENARRIVE in names(cohorts16$by_sex)) {
+    by_sex_list <- cohorts16$by_sex[[WHENARRIVE]]
+    for (sex in names(by_sex_list)) {
+      each <- by_sex_list[[sex]]
+      design <- svydesign(ids = ~hhid, weights = ~Weight_household, data = each, na.rm = TRUE)
+      holder <- svymean(~FD, design = design, na.rm = TRUE)
+      cohorts16$means_by_sex[[paste(WHENARRIVE, sex, sep = "_")]] <- holder
+    }
+  }
+  
+  # Calculating means for each cohort
+  for (WHENARRIVE in names(cohorts16$cohort)) {
+    each <- cohorts16$cohort[[WHENARRIVE]]
+    design <- svydesign(ids = ~hhid, weights = ~Weight_household, data = each, na.rm = TRUE)
+    holder <- svymean(~FD, design = design, na.rm = TRUE)
+    cohorts16$cohort_means[[WHENARRIVE]] <- holder
+  }
+  
+  #I want to get the weighted n's for each group
+    for (WHENARRIVE in names(cohorts16$by_sex)) {
+    w_n_list <- cohorts16$by_sex[[WHENARRIVE]]
+    for (sex in names(w_n_list)) {
+      each <- w_n_list[[sex]]
+      design <- svydesign(ids = ~hhid, weights = ~Weight_household_pop, data = each, na.rm = TRUE)
+      holder <- svytotal(~in_df, design = design, na.rm = TRUE)
+      cohorts16$w_n_list[[paste(WHENARRIVE, sex, sep = "_")]] <- holder
+    }
+  }
+  
+  return(cohorts16)
+}
+
+```
+
+```{r}
+cohorts16<-f_d_16(data = master_list$UNASR16[[1]],master_list$UNASR16[[2]])
+cohorts17<-f_d_16(data = master_list$UNASR17[[1]],master_list$UNASR17[[2]])
+cohorts18<-f_d_16(data = master_list$UNASR18[[1]],master_list$UNASR18[[2]])
+cohorts19<-f_d_16(data = master_list$UNASR19[[1]],master_list$UNASR19[[2]])
+cohorts20<-f_d_16(data = master_list$UNSR2020,master_list$UNASR2020)
+
+```
+
+```{r}
+a<- rbind(c(cohorts16$w_n_list,cohorts17$w_n_list[[1]] )) 
+```
+```{r}
+# Now to pool and impute the data
+
+POOLED<- base::rbind(master_list$UNASR16[[1]]$data,master_list$UNASR17[[1]], master_list$UNASR18[[1]], master_list$UNASR19[[1]]) 
+
+
+imp_data<- mice(POOLED, predictorMatrix = quickpred(POOLED, exclude= c("hhid", "Weight_household","ORIGIN","MARSTAT", "Foodstamps", "TANF", "RCA", "SSI", "GA","Miscash", "PubHo", "NUM_PROGS")),m = 21)
+
+```
+#### making the pooled and weighted dataset
+```{r}
+POOLED<- base::rbind(master_list$UNASR16[[2]]$data,master_list$UNASR17[[2]], master_list$UNASR18[[2]], master_list$UNASR19[[2]], master_list$UNSR2020) 
+
+wPOOLED<- svydesign(ids=~hhid, weights =~Weight_household,data = POOLED)
+```
+
+```{r, echo=FALSE}
+impPOOLED<- mice(POOLED, predictorMatrix = quickpred(POOLED, exclude= c("hhid", "Weight_household","ORIGIN","MARSTAT", "Foodstamps", "TANF", "RCA", "GA","Miscash", "PubHo", "NUM_PROGS", "TILLJOB", "TILLJOBb")),m = 21)
+
+```
+
+## Need a funcation to do DESC on every variable 
+```{r}
+Desc(POOLED)
+
+```
+
+# Descriptive Statistics
+## Pre-Migration Economic Sector
+```{r error=TRUE}
+library(DescTools)
+Desc(temp16$ECOSECTOR)
+Desc(temp17$ECOSECTOR)
+Desc(temp18$ECOSECTOR)
+Desc(POOLED$ECOSECTOR)
+```
+
+
+## Working Hours
+
+
+```{r}
+summary(temp16$WEEKHOUR)
+summary(temp17$WEEKHOUR)
+summary(temp18$WEEKHOUR)
+```
+##Region of Resettlment
+
+```{r error=TRUE}
+Desc(temp16$HOSTREG)
+
+Desc(temp17$HOSTREG)
+
+Desc(temp18$HOSTREG)
+
+Desc(POOLED$HOSTREG)
+
+```
+
+## National Origin
+```{r}
+
+Freq(temp16$ORIGIN)
+Freq(temp17$ORIGIN)
+Freq(temp18$ORIGIN)
+Freq(POOLED$ORIGIN)
+```
+
+## Current Enrollement in English Training Programs
+
+```{R}
+Freq(temp16$CURENGEN)
+
+Freq(temp17$CURENGEN)
+
+Freq(temp18$CURENGEN)
+
+Freq(POOLED$CURENGEN)
+
+```
+
+## Current Enrollement in Employment training programs
+
+
+```{r}
+Freq(temp16$CUREMPT)
+Freq(temp17$CUREMPT)
+Freq(temp18$CUREMPT)
+Freq(POOLED$CUREMPT)
+
+```
+
+## Current English Proficiency
+
+```{r}
+Freq(temp16$CURENG)
+Freq(temp17$CURENG)
+Freq(temp18$CURENG)
+Freq(POOLED$CURENG)
+sd(as.numeric(POOLED$CURENG), na.rm=T)
+```
+
+## Sex
+
+```{r}
+
+Freq(temp16$SEX)
+Freq(temp17$SEX)
+Freq(temp18$SEX)
+Freq(POOLED$SEX)
+```
+
+## Marital Status
+
+```{r}
+Freq(temp16$MARSTAT)
+
+Freq(temp17$MARSTAT)
+
+Freq(temp18$MARSTAT)
+
+Freq(POOLED$MARSTAT)
+```
+
+## Number of Dependents in household
+
+```{r}
+summary(temp16$DEPENDS)
+sd(temp16$DEPENDS)
+summary(temp17$DEPENDS)
+sd(temp17$DEPENDS)
+summary(temp18$DEPENDS)
+sd(temp18$DEPENDS)
+summary(POOLED$DEPENDS)
+sd(POOLED$DEPENDS)
+
+```
+
+## Years of EDUC_YEARSation
+
+```{r}
+summary(temp16$HIGHEST_DEGREE)
+sd(temp16$HIGHEST_DEGREE, na.rm=T)
+```
+## Context Variable   
+```{r}
+summary(temp16$CONTEXT)
+sd(temp16$CONTEXT, na.rm= T)
+
+summary(temp17$CONTEXT)
+sd(temp17$CONTEXT, na.rm= T)
+
+summary(temp18$CONTEXT)
+sd(temp18$CONTEXT, na.rm= T)
+
+summary(POOLED$CONTEXT)
+sd(POOLED$CONTEXT, na.rm= T)
+```
+
+## PreMigration English Proficiency
+
+
+```{r}
+
+summary(temp16$PREENG)
+summary(temp16$CURENG)
+```
+
+# Analysis with the imputed models
+
+##First FI Pooled "Basics" Nest
+```{r}
+basicsPOOLED<- with(impPOOLED, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS, family = "binomial",design = wPOOLED))
+BPoolpool<-pool(basicsPOOLED)
+summary(BPoolpool)
+```
+
+
+
+
+## Second Pre Context Nest
+```{r}
+pcpool<- with(impPOOLED, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,ref="Iraq")+relevel(ECOSECTOR, "Other"), family = "binomial",design =wPOOLED ))
+preconPOOLED<- pool(pcpool)
+summary(preconPOOLED)
+```
+
+
+## Third Post Context Nest
+```{r}
+pocopool<- with(impPOOLED, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,ref="Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR, family = "binomial", design = wPOOLED))
+posconPOOLED<- pool(pocopool)
+summary(posconPOOLED)
+```
+
+
+## Fourth, Add Pre-Human Capital Vars
+```{r}
+
+prehupool<- with(impPOOLED, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,ref="Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+HIGHEST_DEGREE+CONTEXT+PREENG , family = "binomial", design = wPOOLED))
+prehuPOOLED<- pool(prehupool)
+summary(prehuPOOLED)
+```
+
+
+#Fith, the Final Model (Use this model for intra-model prediction comparisons)
+```{r}
+
+pohupool<- with(impPOOLED, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,ref="Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+HIGHEST_DEGREE+CONTEXT+PREENG+CURENGEN+CUREMPT+CURENG+relevel(URECOSEC, ref=2)+TILLJOBb+WEEKHOUR , family = "binomial", design =  wPOOLED ))
+posthuPOOLED<- pool(pohupool)
+a<-summary(posthuPOOLED)
+```
+## Comparing Results with unimputed data
+```{r}
+unweighted_POOLED_ES<-svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN, ref="Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+HIGHEST_DEGREE+PREENG+CURENGEN+CUREMPT+CURENG+relevel(URECOSEC, ref=2)+TILLJOBb+WEEKHOUR , family = "binomial", design = wPOOLED)
+
+unweighted_POOLED_ES$aic
+```
+## What about factorizing survey year?
+```{r}
+
+pohupool<- with(impPOOLED, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+relevel(factor(SVYYR), ref = "2016")+HIGHEST_DEGREE+PREENG+CURENGEN+CUREMPT+CURENG+relevel(URECOSEC, ref=2)+TILLJOB+WEEKHOUR , family = "binomial", design = wPOOLED))
+posthuPOOLED<- pool(pohupool)
+summary(posthuPOOLED)
+```
+
+
+##Making the prediction dataframe.
+### AIC AND BIC
+
+```{r}
+#comparing AIC's in both models I already have the context +Basics model
+posconPOOLED$glanced
+POOLED$URECOSEC<-relevel(POOLED$URECOSEC, ref=2)
+#making the basics+human capital model
+compareFIpool<- with(impPOOLED, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+HIGHEST_DEGREE+PREENG+CURENGEN+CUREMPT+CURENG+URECOSEC+TILLJOBb , family = "binomial", design = wPOOLED))
+compareFIHCPOOLED<- pool(compareFIpool)
+compareFIHCPOOLED$glanced
+#The human capital one has the lower AIC and BIC
+```
+
+### Non-Miced predictions
+```{r}
+
+POOLED$URECOSEC<-relevel(POOLED$URECOSEC, ref=2)
+modela <- svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+HIGHEST_DEGREE+PREENG+CURENGEN+CUREMPT+CURENG+relevel(URECOSEC, ref=2)+TILLJOB+WEEKHOUR , family = "binomial", design = wPOOLED)
+
+summary(modela)
+#Making the hypothetical dataframe for a maximally advantaged contextual person. 
+maxconpred <- data.frame(RESIDENCY=factor(3), SEX="Male", AGE=39.7, numppl=3, MARSTAT="Never Married", TILLJOB=1, HIGHEST_DEGREE=12, ECOSECTOR="Professional", URECOSEC="Retail/Sales", ORIGIN="Cuba", PREENG="Not Well", HOSTREG="South", CURENGEN="No", CUREMPT="No", CURENG="Well", DEPENDS=1, SVYYR=2018, WEEKHOUR=38.33, TILLJOBb=1)
+
+
+maxhumpred <- data.frame(RESIDENCY=factor(3), SEX="Male", AGE=39.7, numppl=3, MARSTAT="Never Married", TILLJOB=1, HIGHEST_DEGREE=20, ECOSECTOR="Other", URECOSEC= "Professional/ED/Health/SocialServices", ORIGIN="Iraq", PREENG="Very Well", HOSTREG="West", CURENGEN="No", CUREMPT="No", CURENG="Very Well", DEPENDS=1, SVYYR=2016, WEEKHOUR=38.33, TILLJOBb=1)
+#NEED to Add KIDS to make predictions
+#predict(modela, newdata =maxconpred, type = "response")
+
+#predict(modela, newdata =maxhumpred, type = "response")
+```
+
+
+#2016 Fith, the Final Model (Use this model for intra-model prediction comparisons)
+```{r}
+
+pohu19<- with(imp19, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+HOSTREG+HIGHEST_DEGREE+CONTEXT+PREENG+ CURENGEN+CUREMPT+CURENG+relevel(URECOSEC, ref=2)+ TILLJOBb+WEEKHOUR , family = "binomial", design = wtemp19))
+posthu19<- pool(pohu19)
+summary(posthu19)
+```
+
+# 2017 FI Models 
+## Basicis Model
+```{r}
+basics17<- with(imp17, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS, family = "binomial",design = wtemp17))
+B17pool<-pool(basics17)
+summary(B17pool)
+
+
+```
+
+## Second Pre Context Nest
+```{r}
+pc17<- with(imp17, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other"), family = "binomial",design =wtemp17 ))
+precon17<- pool(pc17)
+summary(precon17)
+```
+
+## Third Post Context Nest
+```{r}
+poco17<- with(imp17, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR, family = "binomial", design = wtemp17))
+poscon17<- pool(poco17)
+summary(poscon17)
+```
+
+## Fourth, Add Pre-Human Capital Vars
+```{r}
+
+prehu17<- with(imp17, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+HIGHEST_DEGREE+CONTEXT+PREENG , family = "binomial", design = wtemp17))
+prehu17<- pool(prehu17)
+summary(prehu17)
+
+```
+
+#Fith, the Final Model (Use this model for intra-model prediction comparisons)
+```{r}
+
+pohu17<- with(imp17, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+HOSTREG+relevel(URECOSEC, ref=2)+HIGHEST_DEGREE+CONTEXT+relevel(ECOSECTOR, "Other")+PREENG+ CURENGEN+CUREMPT+CURENG+ TILLJOBb+WEEKHOUR , family = "binomial", design = wtemp17))
+posthu17<- pool(pohu17)
+summary(posthu17)
+```
+
+# 2018 FI Models 
+## Basicis Model
+```{r}
+basics18<- with(imp18, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS, family = "binomial",design = wtemp18))
+B18pool<-pool(basics18)
+summary(B18pool)
+
+
+```
+
+## Second Pre Context Nest
+```{r}
+pc18<- with(imp18, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other"), family = "binomial",design =wtemp18 ))
+precon18<- pool(pc18)
+summary(precon18)
+```
+
+## Third Post Context Nest
+```{r}
+poco18<- with(imp18, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR, family = "binomial", design = wtemp18))
+poscon18<- pool(poco18)
+summary(poscon18)
+```
+
+## Fourth, Add Pre-Human Capital Vars
+```{r}
+
+prehu18<- with(imp18, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+HIGHEST_DEGREE+CONTEXT+PREENG , family = "binomial", design = wtemp18))
+prehu18<- pool(prehu18)
+summary(prehu18)
+
+```
+
+#Fith, the Final Model (Use this model for intra-model prediction comparisons)
+```{r}
+
+pohu18<- with(imp18, svyglm(FI~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+HOSTREG+relevel(URECOSEC, ref=2)+HIGHEST_DEGREE+CONTEXT+relevel(ECOSECTOR, "Other")+PREENG+ CURENGEN+CUREMPT+CURENG+ TILLJOBb+WEEKHOUR , family = "binomial", design = wtemp18))
+posthu18<- pool(pohu18)
+summary(posthu18)
+```
+
+#  TIme to First Job 
+
+## First Pooled "Basics" Nest
+```{r}
+basicsTJPOOLED<- with(impPOOLED, svyglm(TILLJOB~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS, family = "binomial",design = wPOOLED))
+BPoolTJpool<-pool(basicsTJPOOLED)
+summary(BPoolTJpool)
+```
+
+
+## Second Pre Context Nest
+```{r}
+pcTJpool<- with(impPOOLED,svyglm(TILLJOB~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+relevel(ORIGIN,"Iraq" )+relevel(ECOSECTOR,"Other"), family = "binomial",design =wPOOLED ))
+preconTJPOOLED<- pool(pcTJpool)
+summary(preconTJPOOLED)
+```
+
+
+## Third Post Context Nest
+```{r}
+pocoTJpool<- with(impPOOLED, svyglm(TILLJOB~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+relevel(ORIGIN,"Iraq")+relevel(ECOSECTOR,ref = "Other")+HOSTREG+SVYYR, family = "binomial", design = wPOOLED))
+posconTJPOOLED<- pool(pocoTJpool)
+summary(posconTJPOOLED)
+```
+
+
+## Fourth, Add Pre-Human Capital Vars (Final? because Till job may be before current variables)
+```{r}
+prezhuTJpool<- with(impPOOLED, svyglm(TILLJOB~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+relevel(ORIGIN,"Iraq")+relevel(ECOSECTOR,"Other")+HOSTREG+SVYYR+HIGHEST_DEGREE+PREENG, family = "binomial", design = wPOOLED))
+prezhuTJPOOLED<- pool(prezhuTJpool)
+summary(prezhuTJPOOLED)
+
+```
+
+## Firth, the final model
+```{r}
+
+prehuTJpool<- with(impPOOLED, svyglm(TILLJOB~ as.numeric(RESIDENCY)+ SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+relevel(ORIGIN,"Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+HIGHEST_DEGREE+CONTEXT+PREENG+CURENGEN:PREENG+CUREMPT+CURENG, family = "binomial", design = wPOOLED))
+prehuTJPOOLED<- pool(prehuTJpool)
+summary(prehuTJPOOLED)
+```
+
+```{r}
+#Supplemantal Models
+TJ_pooled_unmiced<-svyglm(TILLJOB~ as.numeric(RESIDENCY)+ SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+relevel(ORIGIN,"Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+EDUC+CONTEXT+PREENG+CURENGEN+CUREMPT+CURENG, family = "binomial", design = wPOOLED)
+summary(TJ_pooled_unmiced)
+TJ_pooled_unmiced
+#2016
+summary(svyglm(TILLJOB~ as.numeric(RESIDENCY)+ SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,"Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+HIGHEST_DEGREE+CONTEXT+PREENG+CURENGEN+CUREMPT+CURENG, family = "binomial", design = wtemp16))
+
+#2017
+summary(svyglm(TILLJOB~ as.numeric(RESIDENCY)+ SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,"Iraq")+relevel(ECOSECTOR, "Other")+HOSTREG+HIGHEST_DEGREE+CONTEXT+PREENG+CURENGEN+CUREMPT+CURENG, family = "binomial", design = wtemp17))
+
+#2018 #have to take out Pre=EcoSector because no variation. This is also true for the 2019 model. 
+summary(svyglm(TILLJOB~ as.numeric(RESIDENCY)+ SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,"Iraq")++HOSTREG+HIGHEST_DEGREE+CONTEXT+PREENG+CURENGEN+CUREMPT+CURENG, family = "binomial", design = wtemp18))
+
+
+#2019
+summary(svyglm(TILLJOB~ as.numeric(RESIDENCY)+ SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+relevel(ORIGIN,"Iraq")+HOSTREG+HIGHEST_DEGREE+CONTEXT+PREENG+CURENGEN+CUREMPT+CURENG, family = "binomial", design = wtemp19))
+```
+
+# The comparisons between contexts and human capital
+```{r}
+posconTJPOOLED$glanced
+
+compareTJpool<- with(impPOOLED, svyglm(TILLJOB~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+HIGHEST_DEGREE+PREENG+CURENGEN+CUREMPT+CURENG+URECOSEC , family = "binomial", design = wPOOLED))
+compareTJHCPOOLED<- pool(compareTJpool)
+compareTJHCPOOLED$glanced
+## Contexts are better at the AIC and BIC measures, but what about Predicted probabilities?
+```
+### PRedicted Probabilities
+```{r}
+modelb <- svyglm(TILLJOB~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+HIGHEST_DEGREE+PREENG+CURENGEN+CUREMPT+CURENG+URECOSEC+TILLJOBb , family = "binomial", design = wPOOLED)
+
+
+#Making the hypothetical dataframe for a maximally advantaged contextual person. 
+maxconpred <- data.frame(RESIDENCY=factor(3), SEX="Male", AGE=39.7, numppl=3, MARSTAT="Never Married", TILLJOB=1, HIGHEST_DEGREE=12, ECOSECTOR="Professional", URECOSEC="Retail/Sales", ORIGIN="Cuba", PREENG="Not Well", HOSTREG="South", CURENGEN="No", CUREMPT="No", CURENG="Well", DEPENDS=1, KIDS=1, SVYYR=2018, WEEKHOUR=38.33, TILLJOBb=1)
+
+
+maxhumpred <- data.frame(RESIDENCY=factor(3), SEX="Male", AGE=39.7, numppl=3, MARSTAT="Never Married", TILLJOB=1, HIGHEST_DEGREE=20, ECOSECTOR="Other", URECOSEC= "Professional/ED/Health/SocialServices", ORIGIN="Iraq", PREENG="Very Well", HOSTREG="West", CURENGEN="No", CUREMPT="No", CURENG="Very Well", DEPENDS=1, KIDS=1, SVYYR=2016, WEEKHOUR=38.33, TILLJOBb=1)
+
+predict(modelb, newdata =maxconpred, type = "response")
+
+predict(modelb, newdata =maxhumpred, type = "response")
+```
+# Log of Weekly Working Hours
+
+##First FI Pooled "Basics" Nest
+```{r}
+WHbasicsPOOLED<- with(impPOOLED, svyglm(log(WEEKHOUR +1089/40) ~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS,design = wPOOLED))
+WHBPoolpool<-pool(WHbasicsPOOLED)
+summary(WHBPoolpool)
+```
+
+
+
+
+## Second Pre Context Nest
+```{r}
+WHpcpool<- with(impPOOLED, svyglm(log(WEEKHOUR +1089/40)~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other"),design =wPOOLED ))
+WHpreconPOOLED<- pool(WHpcpool)
+summary(WHpreconPOOLED)
+```
+
+
+## Third Post Context Nest
+```{r}
+WHpocopool<- with(impPOOLED, svyglm(log(WEEKHOUR +1089/40)~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR, design = wPOOLED))
+WHposconPOOLED<- pool(WHpocopool)
+summary(WHposconPOOLED)
+```
+
+
+## Fourth, Add Pre-Human Capital Vars
+```{r}
+
+WHprehupool<- with(impPOOLED, svyglm(log(WEEKHOUR +1089/40)~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+HIGHEST_DEGREE+CONTEXT+PREENG, design = wPOOLED))
+WHprehuPOOLED<- pool(WHprehupool)
+summary(WHprehuPOOLED)
+
+```
+
+
+
+#Fith, the Final Model (Use this model for intra-model prediction comparisons)
+```{r}
+
+WHpohupool<- with(impPOOLED, svyglm(log(WEEKHOUR +1089/40)~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+ORIGIN+relevel(ECOSECTOR, "Other")+HOSTREG+SVYYR+HIGHEST_DEGREE+CONTEXT+PREENG+CURENGEN+CUREMPT+CURENG+relevel(URECOSEC, ref=2)+TILLJOB+FI, design = wPOOLED))
+WHposthuPOOLED<- pool(WHpohupool)
+summary(WHposthuPOOLED)
+
+```
+
+
+# Comparing weekly working hours across maximal individuals
+
+```{r}
+WHposconPOOLED$glanced
+
+compareWHpool<- with(impPOOLED, svyglm(log(WEEKHOUR +1089/40)~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+HIGHEST_DEGREE+PREENG+CURENGEN+CUREMPT+CURENG+URECOSEC+TILLJOBb, design = wPOOLED))
+compareWHHCPOOLED<- pool(compareWHpool)
+compareWHHCPOOLED$glanced
+## Contexts are better at the AIC and BIC measures, but what about Predicted probabilities?
+
+```
+
+
+
+```{r}
+modelc <- svyglm(log(WEEKHOUR +1089/40)~ as.numeric(RESIDENCY)+SEX+AGE+(AGE^2)+numppl+MARSTAT+DEPENDS+KIDS+HIGHEST_DEGREE+PREENG+CURENGEN+CUREMPT+CURENG+URECOSEC+TILLJOBb, design = wPOOLED)
+
+
+#Making the hypothetical dataframe for a maximally advantaged contextual person. 
+maxconpred <- data.frame(RESIDENCY=factor(3), SEX="Male", AGE=39.7, numppl=3, MARSTAT="Never Married", KIDS=1, TILLJOB=1, HIGHEST_DEGREE=12, ECOSECTOR="Professional", URECOSEC="Retail/Sales", ORIGIN="Cuba", PREENG="Not Well", HOSTREG="South", CURENGEN="No", CUREMPT="No", CURENG="Well", DEPENDS=1, SVYYR=2018, WEEKHOUR=38.33, TILLJOBb=1)
+
+
+maxhumpred <- data.frame(RESIDENCY=factor(3), SEX="Male", AGE=39.7, numppl=3, MARSTAT="Never Married", KIDS=1, TILLJOB=1, HIGHEST_DEGREE=20, ECOSECTOR="Other", URECOSEC= "Professional/ED/Health/SocialServices", ORIGIN="Iraq", PREENG="Very Well", HOSTREG="West", CURENGEN="No", CUREMPT="No", CURENG="Very Well", DEPENDS=1, SVYYR=2016, WEEKHOUR=38.33, TILLJOBb=1)
+
+predict(modelc, newdata =maxconpred, type = "response")
+
+predict(modelc, newdata =maxhumpred, type = "response")
+
+```
+
+# The Group-by Descriptive I need
+
+```{r}
+result <- UNSR17 %>%
+  group_by(RESIDENCY, ui_soi_pubassist) %>%
+  summarise(count = n()) %>%
+  mutate(percent = count / sum(count) * 100)
+print(result)
+```
+# For Canadian Comparisons
+I need to find the proportion of economically self-sufficient refugees in each American cohort. They need to be weighted. 
+
+```{r}
+USin19cohort14<- UNSR19[UNSR19$RESIDENCY==2014,]
+USin19cohort14<- USin19cohort14[!(is.na(USin19cohort14$hhid)),]
+USin19cohort14_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin19cohort14,na.rm=T)
+svymean(USin19cohort14$FI, USin19cohort14_w, na.rm=T)
+```
+Now for USin19cohort15
+```{r}
+USin19cohort15<- UNSR19[UNSR19$RESIDENCY==2015,]
+USin19cohort15<- USin19cohort15[!(is.na(USin19cohort15$hhid)),]
+USin19cohort15_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin19cohort15,na.rm=T)
+USin19cohort15$FI
+```
+```{r}
+USin19cohort16<- UNSR19[UNSR19$RESIDENCY==2016,]
+USin19cohort16<- USin19cohort16[!(is.na(USin19cohort16$hhid)),]
+USin19cohort16_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin19cohort16,na.rm=T)
+USin19cohort16$FI
+```
+```{r}
+USin19cohort17<- UNSR19[UNSR19$RESIDENCY==2017,]
+USin19cohort17<- USin19cohort17[!(is.na(USin19cohort17$hhid)),]
+USin19cohort17_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin19cohort17,na.rm=T)
+USin19cohort17$FI
+```
+```{r}
+USin19cohort18<- UNSR19[UNSR19$RESIDENCY==2018,]
+USin19cohort18<- USin19cohort18[!(is.na(USin19cohort18$hhid)),]
+USin19cohort18_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin19cohort18,na.rm=T)
+USin19cohort18$FI
+```
+Now for the 2018.
+```{r}
+USin18cohort17<- UNSR18[UNSR18$RESIDENCY==2017,]
+USin18cohort17<- USin18cohort17[!(is.na(USin18cohort17$hhid)),]
+USin18cohort17_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin18cohort17,na.rm=T)
+USin18cohort17$FI
+```
+```{r}
+USin18cohort16<- UNSR18[UNSR18$RESIDENCY==2016,]
+USin18cohort16<- USin18cohort16[!(is.na(USin18cohort16$hhid)),]
+USin18cohort16_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin18cohort16,na.rm=T)
+USin18cohort16$FI
+```
+```{r}
+USin18cohort15<- UNSR18[UNSR18$RESIDENCY==2015,]
+USin18cohort15<- USin18cohort15[!(is.na(USin18cohort15$hhid)),]
+USin18cohort15_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin18cohort15,na.rm=T)
+USin18cohort15$FI
+```
+```{r}
+USin18cohort14<- UNSR18[UNSR18$RESIDENCY==2014,]
+USin18cohort14<- USin18cohort14[!(is.na(USin18cohort14$hhid)),]
+USin18cohort14_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin18cohort14,na.rm=T)
+USin18cohort14$FI
+```
+```{r}
+USin18cohort13<- UNSR18[UNSR18$RESIDENCY==2013,]
+USin18cohort13<- USin18cohort13[!(is.na(USin18cohort13$hhid)),]
+USin18cohort13_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin18cohort13,na.rm=T)
+USin18cohort13$FI
+```
+Now for 2017
+
+```{r}
+USin17cohort16<- UNSR17[UNSR17$RESIDENCY==2016,]
+USin17cohort16<- USin17cohort16[!(is.na(USin17cohort16$hhid)),]
+USin17cohort16_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin17cohort16,na.rm=T)
+svymean(USin17cohort16$FI, USin17cohort16_w, na.rm=T)
+```
+```{r}
+USin17cohort15<- UNSR17[UNSR17$RESIDENCY==2015,]
+USin17cohort15<- USin17cohort15[!(is.na(USin17cohort15$hhid)),]
+USin17cohort15_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin17cohort15,na.rm=T)
+svymean(USin17cohort15$FI, USin17cohort15_w, na.rm=T)
+```
+
+```{r}
+USin17cohort14<- UNSR17[UNSR17$RESIDENCY==2014,]
+USin17cohort14<- USin17cohort14[!(is.na(USin17cohort14$hhid)),]
+USin17cohort14_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin17cohort14,na.rm=T)
+svymean(USin17cohort14$FI, USin17cohort14_w, na.rm=T)
+```
+
+```{r}
+USin17cohort13<- UNSR17[UNSR17$RESIDENCY==2013,]
+USin17cohort13<- USin17cohort13[!(is.na(USin17cohort13$hhid)),]
+USin17cohort13_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin17cohort13,na.rm=T)
+svymean(USin17cohort13$FI, USin17cohort13_w, na.rm=T)
+```
+
+```{r}
+USin17cohort12<- UNSR17[UNSR17$RESIDENCY==2012,]
+USin17cohort12<- USin17cohort12[!(is.na(USin17cohort12$hhid)),]
+USin17cohort12_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin17cohort12,na.rm=T)
+svymean(USin17cohort12$FI, USin17cohort12_w, na.rm=T)
+```
+And 2016
+
+```{r}
+USin16cohort15<- UNSR16[UNSR16$RESIDENCY==2015,]
+USin16cohort15<- USin16cohort15[!(is.na(USin16cohort15$hhid)),]
+USin16cohort15_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin16cohort15,na.rm=T)
+svymean(USin16cohort15$FI, USin16cohort15_w, na.rm=T)
+```
+```{r}
+USin16cohort14<- UNSR16[UNSR16$RESIDENCY==2014,]
+USin16cohort14<- USin16cohort14[!(is.na(USin16cohort14$hhid)),]
+USin16cohort14_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin16cohort14,na.rm=T)
+svymean(USin16cohort14$FI, USin16cohort14_w, na.rm=T)
+```
+```{r}
+USin16cohort13<- UNSR16[UNSR16$RESIDENCY==2013,]
+USin16cohort13<- USin16cohort13[!(is.na(USin16cohort13$hhid)),]
+USin16cohort13_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin16cohort13,na.rm=T)
+svymean(USin16cohort13$FI, USin16cohort13_w, na.rm=T)
+```
+```{r}
+USin16cohort12<- UNSR16[UNSR16$RESIDENCY==2012,]
+USin16cohort12<- USin16cohort12[!(is.na(USin16cohort12$hhid)),]
+USin16cohort12_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin16cohort12,na.rm=T)
+svymean(USin16cohort12$FI, USin16cohort12_w, na.rm=T)
+```
+```{r}
+USin16cohort11<- UNSR16[UNSR16$RESIDENCY==2011,]
+USin16cohort11<- USin16cohort11[!(is.na(USin16cohort11$hhid)),]
+USin16cohort11_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin16cohort11,na.rm=T)
+svymean(USin16cohort11$FD, USin16cohort11_w, na.rm=T)
+```
+
+# Now to seperate them male and female headed households (and use prettier and more consice code.)
+
+```{r}
+USin16cohort11<- UNSR16[UNSR16$RESIDENCY==2011 & UNSR16$SEX=="Male",]
+USin16cohort11<- USin16cohort11[!(is.na(USin16cohort11$hhid)),]
+USin16cohort11_w<- svydesign(ids=~hhid, weights =~Weight_household,data = USin16cohort11,na.rm=T)
+svymean(USin16cohort11$FD, USin16cohort11_w, na.rm=T)
+```
+
+
+
+
+
