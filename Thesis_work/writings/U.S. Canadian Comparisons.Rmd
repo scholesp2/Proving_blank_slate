@@ -23,33 +23,36 @@ library(modelsummary)
 #Use Years_in<6 for all cohorts
 CA<-read.csv(file= "P:/Refugee Data/Canadian Data/CAUS16-21.csv" ) %>% 
     fill(Resettlement_type) %>% mutate(Prop_FD= (Percent_FD*.01)) %>% mutate(Moe95= case_when(Resettlement_type== "US_Gov"~ (1.645*(sqrt(Prop_FD*(1-Prop_FD)/Total_persons))),
-    .default=0)) %>% filter(!is.na(Percent_FD)) %>% filter((Reference_period-Admission_year)==5) %>% group_split(Sex, Resettlement_type)
+    .default=0)) %>% filter(!is.na(Percent_FD)) %>% filter((Reference_period-Admission_year)<=5) |> filter(Reference_period!=2021) %>% group_split(Sex, Resettlement_type, Reference_period)
 names(CA) <- sapply(CA, function(df) paste0(df$Sex[1],df$Reference_period[1], df$Resettlement_type[1], "_"))
 
 ```
 
 ```{r}
-cor1<-cor(CA$All_sexes2016Gov_$Percent_FD, CA$All_sexes2016USGov_$Percent_FD)
-CA$All_sexes2017Gov_<- CA$All_sexes2017Gov_[CA$All_sexes2017Gov_$Admission_year!=2011,]
-cor2<-cor(CA$All_sexes2017Gov_$Percent_FD, CA$All_sexes2017USGov_$Percent_FD)
-CA$All_sexes2018Gov_<- CA$All_sexes2018Gov_[CA$All_sexes2018Gov_$Admission_year>=2013,]
-cor3<-cor(CA$All_sexes2018Gov_$Percent_FD, CA$All_sexes2018USGov_$Percent_FD)
+cor1<-cor(CA$`All Sexes2016CA_Gov_`$Percent_FD, CA$`All Sexes2016US_Gov_`$Percent_FD, )
+CA$`All Sexes2017CA_Gov_`<- CA$`All Sexes2017CA_Gov_`[CA$`All Sexes2017CA_Gov_`$Admission_year!=2011,]
+cor2<-cor(CA$`All Sexes2017CA_Gov_`$Percent_FD, CA$`All Sexes2017US_Gov_`$Percent_FD)
+CA$`All Sexes2018CA_Gov_`<- CA$`All Sexes2018CA_Gov_`[CA$`All Sexes2018CA_Gov_`$Admission_year>=2013,]
+cor3<-cor(CA$`All Sexes2018CA_Gov_`$Percent_FD, CA$`All Sexes2018US_Gov_`$Percent_FD)
 # The cors are all really high except for 2019, which is only modestly high at ~.39
-CA$All_sexes2019Gov_<- CA$All_sexes2019Gov_[CA$All_sexes2019Gov_$Admission_year>=2014,]
-cor4<-cor(CA$All_sexes2019Gov_$Percent_FD, CA$All_sexes2019USGov_$Percent_FD)
-CA$All_sexes2020Gov_<- CA$All_sexes2020Gov_[CA$All_sexes2020Gov_$Admission_year>=2015,]
-cor5<-cor(CA$All_sexes2020Gov_$Percent_FD, CA$All_sexes2020USGov_$Percent_FD)
+CA$`All Sexes2019CA_Gov_`<- CA$`All Sexes2019CA_Gov_`[CA$`All Sexes2019CA_Gov_`$Admission_year>=2014,]
+cor4<-cor(CA$`All Sexes2019CA_Gov_`$Percent_FD, CA$`All Sexes2019US_Gov_`$Percent_FD)
+CA$`All Sexes2020CA_Gov_`<- CA$`All Sexes2020CA_Gov_`[CA$`All Sexes2020CA_Gov_`$Admission_year>=2015,]
+cor5<-cor(CA$`All Sexes2020CA_Gov_`$Percent_FD, CA$`All Sexes2020US_Gov_`$Percent_FD)
 # Mean cor should probably be high
 mean_cor<- sum(cor1, cor2, cor3, cor4)/4
 print(mean_cor)
 #And what about average distance?
-ave_distance<-sum(abs(CA$All_sexes2016Gov_$Percent_FD-CA$All_sexes2016USGov_$Percent_FD),abs(CA$All_sexes2017Gov_$Percent_FD-CA$All_sexes2017USGov_$Percent_FD), abs(CA$All_sexes2018Gov_$Percent_FD-CA$All_sexes2018USGov_$Percent_FD), abs(CA$All_sexes2019Gov_$Percent_FD-CA$All_sexes2019USGov_$Percent_FD))/20
+ave_distance<-sum(abs(CA$`All Sexes2016CA_Gov_`$Percent_FD-CA$`All Sexes2016US_Gov_`$Percent_FD),abs(CA$`All Sexes2017CA_Gov_`$Percent_FD-CA$`All Sexes2017US_Gov_`$Percent_FD), abs(CA$`All Sexes2018CA_Gov_`$Percent_FD-CA$`All Sexes2018US_Gov_`$Percent_FD), abs(CA$`All Sexes2019CA_Gov_`$Percent_FD-CA$`All Sexes2019US_Gov_`$Percent_FD))/20
 print(ave_distance)
 
 
 
 
-ave_distance<-sum(abs(CA$All_sexes2016Gov_$Percent_FD[1:4]-CA$All_sexes2016USGov_$Percent_FD[1:4]),abs(CA$All_sexes2017Gov_$Percent_FD[1:4]-CA$All_sexes2017USGov_$Percent_FD[1:4]), abs(CA$All_sexes2018Gov_$Percent_FD[1:4]-CA$All_sexes2018USGov_$Percent_FD[1:4]), abs(CA$All_sexes2019Gov_$Percent_FD[1:4]-CA$All_sexes2019USGov_$Percent_FD[1:4]))/16
+ave_distance<-sum(abs(CA$`All Sexes2016CA_Gov_`$Percent_FD[1:4]-CA$`All Sexes2016US_Gov_`$Percent_FD[1:4]),abs(CA$`All Sexes2017CA_Gov_`$Percent_FD[1:4]-CA$`All Sexes2017US_Gov_`$Percent_FD[1:4]), abs(CA$`All Sexes2018CA_Gov_`$Percent_FD[1:4]-CA$`All Sexes2018US_Gov_`$Percent_FD[1:4]), abs(CA$`All Sexes2019CA_Gov_`$Percent_FD[1:4]-CA$`All Sexes2019US_Gov_`$Percent_FD[1:4]))/16
+print(ave_distance)
+
+ave_distance<-sum(CA$`All Sexes2016CA_Gov_`$Percent_FD[1:4]-CA$`All Sexes2016US_Gov_`$Percent_FD[1:4],CA$`All Sexes2017CA_Gov_`$Percent_FD[1:4]-CA$`All Sexes2017US_Gov_`$Percent_FD[1:4], CA$`All Sexes2018CA_Gov_`$Percent_FD[1:4]-CA$`All Sexes2018US_Gov_`$Percent_FD[1:4], CA$`All Sexes2019CA_Gov_`$Percent_FD[1:4]-CA$`All Sexes2019US_Gov_`$Percent_FD[1:4])/16
 print(ave_distance)
 ```
 
@@ -102,7 +105,11 @@ ploter<- function(data,x=data$Admission_year,y=data$Prop_FD,groups=data$Resettle
 ```
 
 ```{r}
-lapply(CA, ploter)
+<-lapply(CA, ploter)
+```
+```{r}
+
+
 ```
 
 
@@ -143,10 +150,10 @@ ploter<- function(data,x=data$Admission_year,y=data$Prop_FD,groups=data$Resettle
     geom_ribbon(aes(ymin=y-moe , ymax=y+moe, fill=groups, alpha=.2), show.legend = F) +
     
     scale_x_continuous(name = paste(data$Sex[1],"in", data$Reference_period[1])) + 
-    scale_y_continuous(name = "Percent Using Any Public Assistance Program", limits= c(0,1))+theme_minimal()+guides(alpha=FALSE)+
+    scale_y_continuous(name = "Proportion Using Any Public Assistance Program", limits= c(0,1))+theme_minimal()+guides(alpha=FALSE)+
     labs(color = "Resettlement Type")+
     
-    scale_color_manual(values = c("CA_Gov"= "#ed0101", "US_Gov"= "#0c44ac", "Blend"="yellow", "Private"="Green"))+
+    scale_color_manual(values = c("CA_Gov"= "#ed0101", "US_Gov"= "#0c44ac", "Blend"="gold", "Private"="Green"))+
     scale_fill_manual(values=c("lightblue", "lightblue", "lightblue", "lightblue"))
 
 }
@@ -155,8 +162,80 @@ ploter<- function(data,x=data$Admission_year,y=data$Prop_FD,groups=data$Resettle
 ```
 
 ```{r}
-lapply(CA, ploter)
+all_sexes<-bind_rows(CA$`All Sexes2016_`, CA$`All Sexes2017_`, CA$`All Sexes2018_`, CA$`All Sexes2019_`)
+ggplot(all_sexes, aes(x=Admission_year, y=Prop_FD, group=Resettlement_type))+ 
+  geom_line(aes(color=Resettlement_type))+ 
+  geom_point(aes(color=Resettlement_type, shape = Resettlement_type), size=3)+
+  geom_ribbon(aes(ymin=Prop_FD-Moe95 , ymax=Prop_FD+Moe95, fill=Resettlement_type, alpha=.2), show.legend = F)+
+    
+  scale_x_continuous(name = "Year Arrived in Country") + 
+  scale_y_continuous(name = "Proportion Using Any Public Assistance Program", limits= c(0,1))+
+  
+  theme_minimal()+
+  guides(alpha=FALSE)+
+  labs(title= "FIGURE 1. Refugee Household Public Assistance Use By Arrival Cohort, 
+  Resettlement Type, and Country of Resettlement 2016-2019", color = "Resettlement Type", shape="Resettlement Type", caption = "Note: Canadian data from the Longitudinal Immigration DataBase\n is a complete accounting of tax payers with no margin of error.\n United States data is from the Annual Survey of Refugees.")+
+    
+  scale_color_manual(values = c("CA_Gov"= "#ed0101", "US_Gov"= "#0c44ac", "Blend"="gold", "Private"="Green"))+
+  scale_fill_manual(values=c("lightblue", "lightblue", "lightblue", "lightblue"))+ 
+  scale_shape_manual(values=c("CA_Gov"=16, "US_Gov"=17, "Blend"=18, "Private"=15))+
+  facet_wrap(~Reference_period, labeller = as_labeller(c("2016"= "2016 Reference Date", "2017"= "2017 Reference Date", "2018"= "2018 Reference Date", "2019"= "2019 Reference Date")))+
+    theme(plot.caption = element_text(hjust = 0, face = "italic", size = 10))
+                        
 ```
+
+This compares male headed households to the female headed households for every year. 
+```{r}
+ggplot()+
+  geom_line(data = CA$Females2016_, aes(x=Years_in, y = Prop_FD, colour = Resettlement_type))+
+  geom_point(data = CA$Females2016_,aes(x=Years_in, y = Prop_FD,color=Resettlement_type, shape = Resettlement_type), size=3)+
+    geom_ribbon(data=CA$Females2016_, aes(x=Years_in, ymin=Prop_FD-Moe95 , ymax=Prop_FD+Moe95, fill=Resettlement_type, alpha=.2), show.legend = F) +
+  geom_line(data = CA$Females2017_, aes(x=Years_in, y = Prop_FD, colour = Resettlement_type))+
+  geom_point(data = CA$Females2017_,aes(x=Years_in, y = Prop_FD,color=Resettlement_type, shape = Resettlement_type), size=3)+
+    geom_ribbon(data=CA$Females2017_, aes(x=Years_in, ymin=Prop_FD-Moe95 , ymax=Prop_FD+Moe95, fill=Resettlement_type, alpha=.2), show.legend = F) +
+  geom_line(data = CA$Females2018_, aes(x=Years_in, y = Prop_FD, colour = Resettlement_type))+
+  geom_point(data = CA$Females2018_,aes(x=Years_in, y = Prop_FD,color=Resettlement_type, shape = Resettlement_type), size=3)+
+    geom_ribbon(data=CA$Females2018_, aes(x=Years_in, ymin=Prop_FD-Moe95 , ymax=Prop_FD+Moe95, fill=Resettlement_type, alpha=.2), show.legend = F) +
+  geom_line(data = CA$Females2019_, aes(x=Years_in, y = Prop_FD, colour = Resettlement_type))+
+  geom_point(data = CA$Females2019_,aes(x=Years_in, y = Prop_FD,color=Resettlement_type, shape = Resettlement_type), size=3)+
+    geom_ribbon(data=CA$Females2019_, aes(x=Years_in, ymin=Prop_FD-Moe95 , ymax=Prop_FD+Moe95, fill=Resettlement_type, alpha=.2), show.legend = F) +
+    ggtitle("FIGURE 2. Female-Headed Household Public Assistance Use, 2016-2019")+
+    scale_x_continuous(name= "Years Since Resettlement") + 
+    scale_y_continuous(name = "Proportiont Using Any Public Assistance Program", limits= c(0,1))+theme_minimal()+guides(alpha=FALSE)+
+    labs(color = "Resettlement Type", shape="Resettlement Type", caption = "Note: Canadian data from the Longitudinal Immigration DataBase\n is a complete accounting of tax payers with no margin of error.\n United States data is from the Annual Survey of Refugees.")+
+    
+    scale_color_manual(values = c("CA_Gov"= "#ed0101", "US_Gov"= "#0c44ac", "Blend"="gold", "Private"="Green"))+
+    scale_fill_manual(values=c("lightblue", "lightblue", "lightblue", "lightblue"))+
+    scale_shape_manual(values=c("CA_Gov"=16, "US_Gov"=17, "Blend"=18, "Private"=15))+
+    theme(plot.caption = element_text(hjust = 0, face = "italic", size = 10))
+
+```
+```{r}
+ggplot()+
+  geom_line(data = CA$Males2016_, aes(x=Years_in, y = Prop_FD, colour = Resettlement_type))+
+  geom_point(data = CA$Males2016_,aes(x=Years_in, y = Prop_FD,color=Resettlement_type, shape = Resettlement_type), size=3)+
+    geom_ribbon(data=CA$Males2016_, aes(x=Years_in, ymin=Prop_FD-Moe95 , ymax=Prop_FD+Moe95, fill=Resettlement_type, alpha=.2), show.legend = F) +
+  geom_line(data = CA$Males2017_, aes(x=Years_in, y = Prop_FD, colour = Resettlement_type))+
+  geom_point(data = CA$Males2017_,aes(x=Years_in, y = Prop_FD,color=Resettlement_type, shape = Resettlement_type), size=3)+
+    geom_ribbon(data=CA$Males2017_, aes(x=Years_in, ymin=Prop_FD-Moe95 , ymax=Prop_FD+Moe95, fill=Resettlement_type, alpha=.2), show.legend = F) +
+  geom_line(data = CA$Males2018_, aes(x=Years_in, y = Prop_FD, colour = Resettlement_type))+
+  geom_point(data = CA$Males2018_,aes(x=Years_in, y = Prop_FD,color=Resettlement_type, shape = Resettlement_type), size=3)+
+    geom_ribbon(data=CA$Males2018_, aes(x=Years_in, ymin=Prop_FD-Moe95 , ymax=Prop_FD+Moe95, fill=Resettlement_type, alpha=.2), show.legend = F) +
+  geom_line(data = CA$Males2019_, aes(x=Years_in, y = Prop_FD, colour = Resettlement_type))+
+  geom_point(data = CA$Males2019_,aes(x=Years_in, y = Prop_FD,color=Resettlement_type, shape = Resettlement_type), size=3)+
+    geom_ribbon(data=CA$Males2019_, aes(x=Years_in, ymin=Prop_FD-Moe95 , ymax=Prop_FD+Moe95, fill=Resettlement_type, alpha=.2), show.legend = F) +
+    ggtitle("FIGURE 3. Male-Headed Household Public Assistance Use, 2016-2019")+
+    scale_x_continuous(name= "Years Since Resettlement") + 
+    scale_y_continuous(name = "Proportiont Using Any Public Assistance Program", limits= c(0,1))+theme_minimal()+guides(alpha=FALSE)+
+    labs(color = "Resettlement Type", shape="Resettlement Type", caption = "Note: Canadian data from the Longitudinal Immigration DataBase\n is a complete accounting of tax payers with no margin of error.\n United States data is from the Annual Survey of Refugees.")+
+    
+    scale_color_manual(values = c("CA_Gov"= "#ed0101", "US_Gov"= "#0c44ac", "Blend"="gold", "Private"="Green"))+
+    scale_fill_manual(values=c("lightblue", "lightblue", "lightblue", "lightblue"))+
+  scale_shape_manual(values=c("CA_Gov"=16, "US_Gov"=17, "Blend"=18, "Private"=15))+
+  theme(plot.caption = element_text(hjust = 0, face = "italic", size = 10))
+
+```
+
 
 # For regression Analysis
 ```{r}
